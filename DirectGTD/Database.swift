@@ -25,7 +25,7 @@ class Database {
     }
 
     private func setupDatabase() throws {
-        guard let schemaURL = Bundle.main.url(forResource: "schema", withExtension: "sql", subdirectory: "database") else {
+        guard let schemaURL = Bundle.main.url(forResource: "schema", withExtension: "sql") else {
             fatalError("schema.sql not found in bundle")
         }
 
