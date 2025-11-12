@@ -9,6 +9,11 @@ import SwiftUI
 
 @main
 struct DirectGTDApp: App {
+    init() {
+        // Initialize database on app launch
+        _ = Database.shared
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

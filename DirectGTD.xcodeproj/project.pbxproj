@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		1EA486A92EC443DF0017F6CA /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 1EA486A82EC443DF0017F6CA /* GRDB */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		1EA4867F2EC43FAD0017F6CA /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1EA486A92EC443DF0017F6CA /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = DirectGTD;
 			packageProductDependencies = (
+				1EA486A82EC443DF0017F6CA /* GRDB */,
 			);
 			productName = DirectGTD;
 			productReference = 1EA486712EC43FAA0017F6CA /* DirectGTD.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = 1EA486682EC43FAA0017F6CA;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1EA486A72EC443DF0017F6CA /* XCRemoteSwiftPackageReference "GRDB" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1EA486722EC43FAA0017F6CA /* Products */;
 			projectDirPath = "";
@@ -615,6 +624,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		1EA486A72EC443DF0017F6CA /* XCRemoteSwiftPackageReference "GRDB" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1EA486A82EC443DF0017F6CA /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1EA486A72EC443DF0017F6CA /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1EA486692EC43FAA0017F6CA /* Project object */;
 }
