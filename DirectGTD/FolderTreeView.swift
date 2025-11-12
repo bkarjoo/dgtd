@@ -45,6 +45,7 @@ struct FolderRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Main folder row
             HStack(spacing: 8) {
                 // Indentation for nested folders
                 if level > 0 {
@@ -54,17 +55,10 @@ struct FolderRowView: View {
 
                 // Disclosure indicator for folders with children
                 if let children = folder.children, !children.isEmpty {
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isExpanded.toggle()
-                        }
-                    }) {
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.secondary)
-                            .frame(width: 16, height: 16)
-                    }
-                    .buttonStyle(.plain)
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 16, height: 16)
                 } else if level > 0 {
                     // Spacer to align with expanded folders
                     Color.clear
@@ -85,6 +79,11 @@ struct FolderRowView: View {
             }
             .padding(.vertical, 4)
             .contentShape(Rectangle())
+            .onTapGesture {
+                if folder.children != nil {
+                    isExpanded.toggle()
+                }
+            }
 
             // Children (nested folders)
             if let children = folder.children, isExpanded {
