@@ -1,13 +1,20 @@
 import SwiftUI
 
 // Mock folder structure for styling
-struct MockFolder: Identifiable {
+struct MockFolder: Identifiable, Hashable {
     let id = UUID()
     let name: String
     let icon: String
     let color: Color
     var children: [MockFolder]?
-    var isExpanded: Bool = true
+
+    static func == (lhs: MockFolder, rhs: MockFolder) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
 }
 
 struct FolderTreeView: View {
@@ -27,71 +34,107 @@ struct FolderTreeView: View {
         MockFolder(name: "Trash", icon: "trash.fill", color: .red, children: nil)
     ]
 
+    // Keep expansion state at container level (not inside rows)
+    @State private var expanded: Set<UUID> = []
+
     var body: some View {
-        List {
-            ForEach(folders) { folder in
-                FolderRowView(folder: folder, level: 0)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(visibleFolders(), id: \.folder.id) { item in
+                    FolderRow(
+                        folder: item.folder,
+                        depth: item.depth,
+                        isExpanded: expanded.contains(item.folder.id),
+                        toggle: { toggle(item.folder.id) }
+                    )
+                }
+            }
+            // Disable implicit row animations that cause leftover space
+            .animation(nil, value: expanded)
+            .padding(.horizontal, 8)
+        }
+        .navigationTitle("Folders")
+        .onAppear {
+            // Expand Projects folder by default
+            if let projectsFolder = folders.first(where: { $0.name == "Projects" }) {
+                expanded.insert(projectsFolder.id)
             }
         }
-        .listStyle(.sidebar)
-        .navigationTitle("Folders")
+    }
+
+    private func toggle(_ id: UUID) {
+        if expanded.contains(id) {
+            expanded.remove(id)
+        } else {
+            expanded.insert(id)
+        }
+    }
+
+    // Flatten the visible tree based on expanded state
+    private func visibleFolders() -> [(folder: MockFolder, depth: Int)] {
+        var result: [(MockFolder, Int)] = []
+
+        func walk(_ folders: [MockFolder], depth: Int) {
+            for folder in folders {
+                result.append((folder, depth))
+                if expanded.contains(folder.id), let children = folder.children {
+                    walk(children, depth: depth + 1)
+                }
+            }
+        }
+
+        walk(folders, depth: 0)
+        return result
     }
 }
 
-struct FolderRowView: View {
+struct FolderRow: View {
     let folder: MockFolder
-    let level: Int
-    @State private var isExpanded: Bool = true
+    let depth: Int
+    let isExpanded: Bool
+    let toggle: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Main folder row
-            HStack(spacing: 8) {
-                // Indentation for nested folders
-                if level > 0 {
-                    Color.clear
-                        .frame(width: CGFloat(level * 20))
-                }
+        HStack(spacing: 8) {
+            // Indentation for nested folders
+            if depth > 0 {
+                Rectangle()
+                    .frame(width: CGFloat(depth) * 20, height: 0)
+                    .opacity(0)
+            }
 
-                // Disclosure indicator for folders with children
-                if let children = folder.children, !children.isEmpty {
+            // Disclosure indicator for folders with children
+            if let children = folder.children, !children.isEmpty {
+                Button(action: toggle) {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.secondary)
-                        .frame(width: 16, height: 16)
-                } else if level > 0 {
-                    // Spacer to align with expanded folders
-                    Color.clear
-                        .frame(width: 16, height: 16)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
                 }
-
-                // Folder icon
-                Image(systemName: folder.icon)
-                    .font(.system(size: 16))
-                    .foregroundColor(folder.color)
+                .buttonStyle(.plain)
+            } else {
+                // Reserve space for chevron to keep alignment consistent
+                Color.clear
                     .frame(width: 20, height: 20)
-
-                // Folder name
-                Text(folder.name)
-                    .font(.system(size: 14))
-
-                Spacer()
-            }
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if folder.children != nil {
-                    isExpanded.toggle()
-                }
             }
 
-            // Children (nested folders)
-            if let children = folder.children, isExpanded {
-                ForEach(children) { child in
-                    FolderRowView(folder: child, level: level + 1)
-                }
-            }
+            // Folder icon
+            Image(systemName: folder.icon)
+                .font(.system(size: 16))
+                .foregroundColor(folder.color)
+                .frame(width: 20, height: 20)
+
+            // Folder name
+            Text(folder.name)
+                .font(.system(size: 14))
+                .lineLimit(1)
+
+            Spacer()
         }
+        .contentShape(Rectangle())
+        .padding(.vertical, 6)
+        .background(Color.clear)
     }
 }
 
