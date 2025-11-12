@@ -1,6 +1,17 @@
 -- DirectGTD Database Schema
 -- Unified item model for GTD workflow
 
+CREATE TABLE folders (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    icon TEXT,
+    color TEXT,
+    sort_order INTEGER DEFAULT 0,
+    is_system BOOLEAN DEFAULT 0, -- true for built-in folders like inbox, trash
+    created_at INTEGER NOT NULL,
+    modified_at INTEGER NOT NULL
+);
+
 CREATE TABLE items (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -12,7 +23,7 @@ CREATE TABLE items (
 
     -- GTD workflow
     status TEXT DEFAULT 'next_action', -- next_action, waiting, someday, completed
-    folder TEXT DEFAULT 'inbox', -- inbox, projects, reference, trash, archive
+    folder_id TEXT,
     context TEXT, -- @home, @work, @computer, etc.
 
     -- Temporal
@@ -27,7 +38,8 @@ CREATE TABLE items (
     energy_level TEXT, -- high, medium, low
     time_estimate INTEGER, -- minutes
 
-    FOREIGN KEY (parent_id) REFERENCES items(id) ON DELETE CASCADE
+    FOREIGN KEY (parent_id) REFERENCES items(id) ON DELETE CASCADE,
+    FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
 );
 
 CREATE TABLE notes (
@@ -57,7 +69,7 @@ CREATE TABLE item_tags (
 -- Indexes for performance
 CREATE INDEX idx_parent_id ON items(parent_id);
 CREATE INDEX idx_status ON items(status);
-CREATE INDEX idx_folder ON items(folder);
+CREATE INDEX idx_folder_id ON items(folder_id);
 CREATE INDEX idx_context ON items(context);
 CREATE INDEX idx_notes_item ON notes(item_id);
 CREATE INDEX idx_item_tags_item ON item_tags(item_id);

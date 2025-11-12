@@ -1,6 +1,51 @@
 import Foundation
 import GRDB
 
+// MARK: - Folder Model
+struct Folder: Codable, FetchableRecord, PersistableRecord {
+    var id: String
+    var name: String
+    var icon: String?
+    var color: String?
+    var sortOrder: Int
+    var isSystem: Bool
+    var createdAt: Int
+    var modifiedAt: Int
+
+    static let databaseTableName = "folders"
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case icon
+        case color
+        case sortOrder = "sort_order"
+        case isSystem = "is_system"
+        case createdAt = "created_at"
+        case modifiedAt = "modified_at"
+    }
+
+    init(
+        id: String = UUID().uuidString,
+        name: String,
+        icon: String? = nil,
+        color: String? = nil,
+        sortOrder: Int = 0,
+        isSystem: Bool = false,
+        createdAt: Int = Int(Date().timeIntervalSince1970),
+        modifiedAt: Int = Int(Date().timeIntervalSince1970)
+    ) {
+        self.id = id
+        self.name = name
+        self.icon = icon
+        self.color = color
+        self.sortOrder = sortOrder
+        self.isSystem = isSystem
+        self.createdAt = createdAt
+        self.modifiedAt = modifiedAt
+    }
+}
+
 // MARK: - Item Model
 struct Item: Codable, FetchableRecord, PersistableRecord {
     var id: String
@@ -13,7 +58,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
 
     // GTD workflow
     var status: String // next_action, waiting, someday, completed
-    var folder: String // inbox, projects, reference, trash, archive
+    var folderId: String?
     var context: String?
 
     // Temporal
@@ -39,7 +84,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
         static let parentId = Column(CodingKeys.parentId)
         static let sortOrder = Column(CodingKeys.sortOrder)
         static let status = Column(CodingKeys.status)
-        static let folder = Column(CodingKeys.folder)
+        static let folderId = Column(CodingKeys.folderId)
         static let context = Column(CodingKeys.context)
         static let createdAt = Column(CodingKeys.createdAt)
         static let modifiedAt = Column(CodingKeys.modifiedAt)
@@ -59,7 +104,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
         case parentId = "parent_id"
         case sortOrder = "sort_order"
         case status
-        case folder
+        case folderId = "folder_id"
         case context
         case createdAt = "created_at"
         case modifiedAt = "modified_at"
@@ -79,7 +124,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
         parentId: String? = nil,
         sortOrder: Int = 0,
         status: String = "next_action",
-        folder: String = "inbox",
+        folderId: String? = nil,
         context: String? = nil,
         createdAt: Int = Int(Date().timeIntervalSince1970),
         modifiedAt: Int = Int(Date().timeIntervalSince1970),
@@ -96,7 +141,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
         self.parentId = parentId
         self.sortOrder = sortOrder
         self.status = status
-        self.folder = folder
+        self.folderId = folderId
         self.context = context
         self.createdAt = createdAt
         self.modifiedAt = modifiedAt

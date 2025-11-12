@@ -40,6 +40,16 @@ class ItemRepository {
         }
     }
 
+    func createFolder(_ folder: Folder) throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        try dbQueue.write { db in
+            try folder.insert(db)
+        }
+    }
+
     func addTagToItem(itemId: String, tagId: String) throws {
         guard let dbQueue = database.getQueue() else {
             throw DatabaseError.notInitialized
@@ -73,14 +83,14 @@ class ItemRepository {
         }
     }
 
-    func getItemsByFolder(_ folder: String) throws -> [Item] {
+    func getItemsByFolder(_ folderId: String) throws -> [Item] {
         guard let dbQueue = database.getQueue() else {
             throw DatabaseError.notInitialized
         }
 
         return try dbQueue.read { db in
             try Item
-                .filter(Column("folder") == folder)
+                .filter(Column("folder_id") == folderId)
                 .order(Column("sort_order"))
                 .fetchAll(db)
         }
@@ -165,6 +175,36 @@ class ItemRepository {
         }
     }
 
+    func getAllFolders() throws -> [Folder] {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.read { db in
+            try Folder.order(Column("sort_order")).fetchAll(db)
+        }
+    }
+
+    func getFolder(id: String) throws -> Folder? {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.read { db in
+            try Folder.fetchOne(db, key: id)
+        }
+    }
+
+    func getFolderByName(_ name: String) throws -> Folder? {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.read { db in
+            try Folder.filter(Column("name") == name).fetchOne(db)
+        }
+    }
+
     // MARK: - Update
 
     func update(_ item: Item) throws {
@@ -203,6 +243,19 @@ class ItemRepository {
         }
     }
 
+    func updateFolder(_ folder: Folder) throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        var updatedFolder = folder
+        updatedFolder.modifiedAt = Int(Date().timeIntervalSince1970)
+
+        try dbQueue.write { db in
+            try updatedFolder.update(db)
+        }
+    }
+
     // MARK: - Delete
 
     func delete(itemId: String) throws {
@@ -235,6 +288,21 @@ class ItemRepository {
         }
     }
 
+    func deleteFolder(folderId: String) throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        // Check if it's a system folder
+        if let folder = try getFolder(id: folderId), folder.isSystem {
+            throw DatabaseError.cannotDeleteSystemFolder
+        }
+
+        try dbQueue.write { db in
+            try Folder.deleteOne(db, key: folderId)
+        }
+    }
+
     func removeTagFromItem(itemId: String, tagId: String) throws {
         guard let dbQueue = database.getQueue() else {
             throw DatabaseError.notInitialized
@@ -251,18 +319,25 @@ class ItemRepository {
     // MARK: - GTD-specific operations
 
     func addToInbox(title: String, description: String? = nil) throws -> Item {
+        guard let inboxFolder = try getFolderByName("Inbox") else {
+            throw DatabaseError.folderNotFound
+        }
+
         let item = Item(
             title: title,
             description: description,
             status: "next_action",
-            folder: "inbox"
+            folderId: inboxFolder.id
         )
         try create(item)
         return item
     }
 
     func getInboxItems() throws -> [Item] {
-        return try getItemsByFolder("inbox")
+        guard let inboxFolder = try getFolderByName("Inbox") else {
+            throw DatabaseError.folderNotFound
+        }
+        return try getItemsByFolder(inboxFolder.id)
     }
 
     func getNextActions() throws -> [Item] {
@@ -270,10 +345,14 @@ class ItemRepository {
             throw DatabaseError.notInitialized
         }
 
+        guard let trashFolder = try getFolderByName("Trash") else {
+            throw DatabaseError.folderNotFound
+        }
+
         return try dbQueue.read { db in
             try Item
                 .filter(Column("status") == "next_action")
-                .filter(Column("folder") != "trash")
+                .filter(Column("folder_id") != trashFolder.id)
                 .filter(Column("parent_id") == nil || Column("parent_id") == "")
                 .order(Column("sort_order"))
                 .fetchAll(db)
@@ -285,10 +364,14 @@ class ItemRepository {
             throw DatabaseError.notInitialized
         }
 
+        guard let trashFolder = try getFolderByName("Trash") else {
+            throw DatabaseError.folderNotFound
+        }
+
         return try dbQueue.read { db in
             try Item
                 .filter(Column("is_project") == true)
-                .filter(Column("folder") != "trash")
+                .filter(Column("folder_id") != trashFolder.id)
                 .order(Column("sort_order"))
                 .fetchAll(db)
         }
@@ -317,16 +400,20 @@ class ItemRepository {
             throw DatabaseError.itemNotFound
         }
 
-        item.folder = "trash"
+        guard let trashFolder = try getFolderByName("Trash") else {
+            throw DatabaseError.folderNotFound
+        }
+
+        item.folderId = trashFolder.id
         try update(item)
     }
 
-    func moveToFolder(itemId: String, folder: String) throws {
+    func moveToFolder(itemId: String, folderId: String) throws {
         guard var item = try getItem(id: itemId) else {
             throw DatabaseError.itemNotFound
         }
 
-        item.folder = folder
+        item.folderId = folderId
         try update(item)
     }
 
@@ -349,11 +436,15 @@ class ItemRepository {
     }
 
     func addSubItem(parentId: String, title: String, description: String? = nil) throws -> Item {
+        guard let projectsFolder = try getFolderByName("Projects") else {
+            throw DatabaseError.folderNotFound
+        }
+
         let item = Item(
             title: title,
             description: description,
             parentId: parentId,
-            folder: "projects"
+            folderId: projectsFolder.id
         )
         try create(item)
         return item
@@ -365,6 +456,8 @@ class ItemRepository {
 enum DatabaseError: Error, LocalizedError {
     case notInitialized
     case itemNotFound
+    case folderNotFound
+    case cannotDeleteSystemFolder
 
     var errorDescription: String? {
         switch self {
@@ -372,6 +465,10 @@ enum DatabaseError: Error, LocalizedError {
             return "Database is not initialized"
         case .itemNotFound:
             return "Item not found"
+        case .folderNotFound:
+            return "Folder not found"
+        case .cannotDeleteSystemFolder:
+            return "Cannot delete system folder"
         }
     }
 }
