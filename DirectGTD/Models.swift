@@ -9,7 +9,6 @@ struct Folder: Codable, FetchableRecord, PersistableRecord {
     var icon: String?
     var color: String?
     var sortOrder: Int
-    var isSystem: Bool
     var createdAt: Int
     var modifiedAt: Int
 
@@ -22,7 +21,6 @@ struct Folder: Codable, FetchableRecord, PersistableRecord {
         case icon
         case color
         case sortOrder = "sort_order"
-        case isSystem = "is_system"
         case createdAt = "created_at"
         case modifiedAt = "modified_at"
     }
@@ -34,7 +32,6 @@ struct Folder: Codable, FetchableRecord, PersistableRecord {
         icon: String? = nil,
         color: String? = nil,
         sortOrder: Int = 0,
-        isSystem: Bool = false,
         createdAt: Int = Int(Date().timeIntervalSince1970),
         modifiedAt: Int = Int(Date().timeIntervalSince1970)
     ) {
@@ -44,7 +41,6 @@ struct Folder: Codable, FetchableRecord, PersistableRecord {
         self.icon = icon
         self.color = color
         self.sortOrder = sortOrder
-        self.isSystem = isSystem
         self.createdAt = createdAt
         self.modifiedAt = modifiedAt
     }

@@ -17,11 +17,11 @@ class DatabaseSeeder {
 
         print("Seeding database with sample data...")
 
-        // Create system folders
-        let inboxFolder = Folder(name: "Inbox", icon: "tray", color: "#3B82F6", sortOrder: 0, isSystem: true)
-        let projectsFolder = Folder(name: "Projects", icon: "folder", color: "#8B5CF6", sortOrder: 1, isSystem: true)
-        let referenceFolder = Folder(name: "Reference", icon: "doc.text", color: "#10B981", sortOrder: 2, isSystem: true)
-        let trashFolder = Folder(name: "Trash", icon: "trash", color: "#EF4444", sortOrder: 3, isSystem: true)
+        // Create default folders (fully customizable by user)
+        let inboxFolder = Folder(name: "Inbox", icon: "tray", color: "#3B82F6", sortOrder: 0)
+        let projectsFolder = Folder(name: "Projects", icon: "folder", color: "#8B5CF6", sortOrder: 1)
+        let referenceFolder = Folder(name: "Reference", icon: "doc.text", color: "#10B981", sortOrder: 2)
+        let trashFolder = Folder(name: "Trash", icon: "trash", color: "#EF4444", sortOrder: 3)
 
         try repository.createFolder(inboxFolder)
         try repository.createFolder(projectsFolder)

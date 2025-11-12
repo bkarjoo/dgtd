@@ -306,11 +306,6 @@ class ItemRepository {
             throw DatabaseError.notInitialized
         }
 
-        // Check if it's a system folder
-        if let folder = try getFolder(id: folderId), folder.isSystem {
-            throw DatabaseError.cannotDeleteSystemFolder
-        }
-
         try dbQueue.write { db in
             try Folder.deleteOne(db, key: folderId)
         }
@@ -470,7 +465,6 @@ enum DatabaseError: Error, LocalizedError {
     case notInitialized
     case itemNotFound
     case folderNotFound
-    case cannotDeleteSystemFolder
 
     var errorDescription: String? {
         switch self {
@@ -480,8 +474,6 @@ enum DatabaseError: Error, LocalizedError {
             return "Item not found"
         case .folderNotFound:
             return "Folder not found"
-        case .cannotDeleteSystemFolder:
-            return "Cannot delete system folder"
         }
     }
 }

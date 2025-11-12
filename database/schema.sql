@@ -8,7 +8,6 @@ CREATE TABLE folders (
     icon TEXT,
     color TEXT,
     sort_order INTEGER DEFAULT 0,
-    is_system BOOLEAN DEFAULT 0, -- true for built-in folders like inbox, trash
     created_at INTEGER NOT NULL,
     modified_at INTEGER NOT NULL,
 
