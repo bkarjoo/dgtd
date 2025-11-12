@@ -1,41 +1,8 @@
 import SwiftUI
 
-// Mock folder structure for styling
-struct MockFolder: Identifiable, Hashable {
-    let id = UUID()
-    let name: String
-    let icon: String
-    let color: Color
-    var children: [MockFolder]?
-
-    static func == (lhs: MockFolder, rhs: MockFolder) -> Bool {
-        lhs.id == rhs.id
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-}
-
 struct FolderTreeView: View {
-    @State private var folders: [MockFolder] = [
-        MockFolder(name: "Inbox", icon: "tray.fill", color: .blue, children: nil),
-        MockFolder(name: "Projects", icon: "folder.fill", color: .purple, children: [
-            MockFolder(name: "Work", icon: "briefcase.fill", color: .orange, children: [
-                MockFolder(name: "Q4 Goals", icon: "target", color: .red, children: nil),
-                MockFolder(name: "Team Projects", icon: "person.2.fill", color: .green, children: nil)
-            ]),
-            MockFolder(name: "Personal", icon: "house.fill", color: .pink, children: [
-                MockFolder(name: "Health", icon: "heart.fill", color: .red, children: nil),
-                MockFolder(name: "Learning", icon: "book.fill", color: .blue, children: nil)
-            ])
-        ]),
-        MockFolder(name: "Reference", icon: "doc.text.fill", color: .green, children: nil),
-        MockFolder(name: "Trash", icon: "trash.fill", color: .red, children: nil)
-    ]
-
-    // Keep expansion state at container level (not inside rows)
-    @State private var expanded: Set<UUID> = []
+    @State private var folders: [Folder] = []
+    private let repository = ItemRepository()
 
     var body: some View {
         ScrollView {
@@ -44,54 +11,74 @@ struct FolderTreeView: View {
                     FolderRow(
                         folder: item.folder,
                         depth: item.depth,
-                        isExpanded: expanded.contains(item.folder.id),
-                        toggle: { toggle(item.folder.id) }
+                        toggle: { toggleFolder(item.folder) }
                     )
                 }
             }
-            // Disable implicit row animations that cause leftover space
-            .animation(nil, value: expanded)
             .padding(.horizontal, 8)
         }
         .navigationTitle("Folders")
         .onAppear {
-            // Expand Projects folder by default
-            if let projectsFolder = folders.first(where: { $0.name == "Projects" }) {
-                expanded.insert(projectsFolder.id)
+            loadFolders()
+        }
+    }
+
+    private func loadFolders() {
+        do {
+            folders = try repository.getAllFolders()
+        } catch {
+            print("Error loading folders: \(error)")
+        }
+    }
+
+    private func toggleFolder(_ folder: Folder) {
+        do {
+            try repository.toggleFolderExpansion(folderId: folder.id)
+            loadFolders() // Reload to get updated state
+        } catch {
+            print("Error toggling folder: \(error)")
+        }
+    }
+
+    // Flatten the visible tree based on expanded state from database
+    private func visibleFolders() -> [(folder: Folder, depth: Int)] {
+        var result: [(Folder, Int)] = []
+
+        // Build a map of folder ID to its children
+        var childrenMap: [String: [Folder]] = [:]
+        for folder in folders {
+            if let parentId = folder.parentId {
+                childrenMap[parentId, default: []].append(folder)
             }
         }
-    }
 
-    private func toggle(_ id: UUID) {
-        if expanded.contains(id) {
-            expanded.remove(id)
-        } else {
-            expanded.insert(id)
+        // Sort children by sort_order
+        for key in childrenMap.keys {
+            childrenMap[key]?.sort { $0.sortOrder < $1.sortOrder }
         }
-    }
 
-    // Flatten the visible tree based on expanded state
-    private func visibleFolders() -> [(folder: MockFolder, depth: Int)] {
-        var result: [(MockFolder, Int)] = []
+        // Get root folders (those without a parent)
+        let rootFolders = folders
+            .filter { $0.parentId == nil }
+            .sorted { $0.sortOrder < $1.sortOrder }
 
-        func walk(_ folders: [MockFolder], depth: Int) {
+        func walk(_ folders: [Folder], depth: Int) {
             for folder in folders {
                 result.append((folder, depth))
-                if expanded.contains(folder.id), let children = folder.children {
+                if folder.isExpanded, let children = childrenMap[folder.id] {
                     walk(children, depth: depth + 1)
                 }
             }
         }
 
-        walk(folders, depth: 0)
+        walk(rootFolders, depth: 0)
         return result
     }
 }
 
 struct FolderRow: View {
-    let folder: MockFolder
+    let folder: Folder
     let depth: Int
-    let isExpanded: Bool
     let toggle: () -> Void
 
     var body: some View {
@@ -103,27 +90,24 @@ struct FolderRow: View {
                     .opacity(0)
             }
 
-            // Disclosure indicator for folders with children
-            if let children = folder.children, !children.isEmpty {
-                Button(action: toggle) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 20, height: 20)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            } else {
-                // Reserve space for chevron to keep alignment consistent
-                Color.clear
+            // Disclosure indicator for folders with children (shown if folder has potential children based on hierarchy)
+            // We'll show chevron for all folders for now, but can optimize later to check if children exist
+            Button(action: toggle) {
+                Image(systemName: folder.isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
                     .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
             // Folder icon
-            Image(systemName: folder.icon)
-                .font(.system(size: 16))
-                .foregroundColor(folder.color)
-                .frame(width: 20, height: 20)
+            if let iconName = folder.icon {
+                Image(systemName: iconName)
+                    .font(.system(size: 16))
+                    .foregroundColor(colorFromHex(folder.color))
+                    .frame(width: 20, height: 20)
+            }
 
             // Folder name
             Text(folder.name)
@@ -135,6 +119,22 @@ struct FolderRow: View {
         .contentShape(Rectangle())
         .padding(.vertical, 6)
         .background(Color.clear)
+    }
+
+    private func colorFromHex(_ hex: String?) -> Color {
+        guard let hex = hex else { return .blue }
+
+        let scanner = Scanner(string: hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted))
+        var hexNumber: UInt64 = 0
+
+        if scanner.scanHexInt64(&hexNumber) {
+            let r = Double((hexNumber & 0xff0000) >> 16) / 255
+            let g = Double((hexNumber & 0x00ff00) >> 8) / 255
+            let b = Double(hexNumber & 0x0000ff) / 255
+            return Color(red: r, green: g, blue: b)
+        }
+
+        return .blue
     }
 }
 
