@@ -9,13 +9,18 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        NavigationSplitView {
+            FolderTreeView()
+        } detail: {
+            VStack {
+                Image(systemName: "tray")
+                    .font(.system(size: 64))
+                    .foregroundColor(.secondary)
+                Text("Select a folder")
+                    .font(.title2)
+                    .foregroundColor(.secondary)
+            }
         }
-        .padding()
     }
 }
 
