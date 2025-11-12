@@ -269,6 +269,23 @@ class ItemRepository {
         }
     }
 
+    func toggleFolderExpansion(folderId: String) throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        guard var folder = try getFolder(id: folderId) else {
+            throw DatabaseError.folderNotFound
+        }
+
+        folder.isExpanded.toggle()
+        folder.modifiedAt = Int(Date().timeIntervalSince1970)
+
+        try dbQueue.write { db in
+            try folder.update(db)
+        }
+    }
+
     // MARK: - Delete
 
     func delete(itemId: String) throws {

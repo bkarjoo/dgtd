@@ -9,6 +9,7 @@ struct Folder: Codable, FetchableRecord, PersistableRecord {
     var icon: String?
     var color: String?
     var sortOrder: Int
+    var isExpanded: Bool
     var createdAt: Int
     var modifiedAt: Int
 
@@ -21,6 +22,7 @@ struct Folder: Codable, FetchableRecord, PersistableRecord {
         case icon
         case color
         case sortOrder = "sort_order"
+        case isExpanded = "is_expanded"
         case createdAt = "created_at"
         case modifiedAt = "modified_at"
     }
@@ -32,6 +34,7 @@ struct Folder: Codable, FetchableRecord, PersistableRecord {
         icon: String? = nil,
         color: String? = nil,
         sortOrder: Int = 0,
+        isExpanded: Bool = true,
         createdAt: Int = Int(Date().timeIntervalSince1970),
         modifiedAt: Int = Int(Date().timeIntervalSince1970)
     ) {
@@ -41,6 +44,7 @@ struct Folder: Codable, FetchableRecord, PersistableRecord {
         self.icon = icon
         self.color = color
         self.sortOrder = sortOrder
+        self.isExpanded = isExpanded
         self.createdAt = createdAt
         self.modifiedAt = modifiedAt
     }

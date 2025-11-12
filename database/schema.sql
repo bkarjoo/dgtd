@@ -8,6 +8,7 @@ CREATE TABLE folders (
     icon TEXT,
     color TEXT,
     sort_order INTEGER DEFAULT 0,
+    is_expanded BOOLEAN DEFAULT 1,
     created_at INTEGER NOT NULL,
     modified_at INTEGER NOT NULL,
 
