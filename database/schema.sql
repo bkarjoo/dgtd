@@ -4,12 +4,15 @@
 CREATE TABLE folders (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    parent_id TEXT,
     icon TEXT,
     color TEXT,
     sort_order INTEGER DEFAULT 0,
     is_system BOOLEAN DEFAULT 0, -- true for built-in folders like inbox, trash
     created_at INTEGER NOT NULL,
-    modified_at INTEGER NOT NULL
+    modified_at INTEGER NOT NULL,
+
+    FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE
 );
 
 CREATE TABLE items (

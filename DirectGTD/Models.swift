@@ -5,6 +5,7 @@ import GRDB
 struct Folder: Codable, FetchableRecord, PersistableRecord {
     var id: String
     var name: String
+    var parentId: String?
     var icon: String?
     var color: String?
     var sortOrder: Int
@@ -17,6 +18,7 @@ struct Folder: Codable, FetchableRecord, PersistableRecord {
     enum CodingKeys: String, CodingKey {
         case id
         case name
+        case parentId = "parent_id"
         case icon
         case color
         case sortOrder = "sort_order"
@@ -28,6 +30,7 @@ struct Folder: Codable, FetchableRecord, PersistableRecord {
     init(
         id: String = UUID().uuidString,
         name: String,
+        parentId: String? = nil,
         icon: String? = nil,
         color: String? = nil,
         sortOrder: Int = 0,
@@ -37,6 +40,7 @@ struct Folder: Codable, FetchableRecord, PersistableRecord {
     ) {
         self.id = id
         self.name = name
+        self.parentId = parentId
         self.icon = icon
         self.color = color
         self.sortOrder = sortOrder

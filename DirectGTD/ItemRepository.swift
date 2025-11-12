@@ -205,6 +205,19 @@ class ItemRepository {
         }
     }
 
+    func getChildFolders(parentId: String) throws -> [Folder] {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.read { db in
+            try Folder
+                .filter(Column("parent_id") == parentId)
+                .order(Column("sort_order"))
+                .fetchAll(db)
+        }
+    }
+
     // MARK: - Update
 
     func update(_ item: Item) throws {
