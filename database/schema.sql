@@ -15,6 +15,23 @@ CREATE TABLE folders (
     FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE
 );
 
+-- Trigger to prevent circular references in folder hierarchy
+CREATE TRIGGER prevent_folder_circular_reference
+BEFORE UPDATE OF parent_id ON folders
+FOR EACH ROW
+WHEN NEW.parent_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'Circular reference detected in folder hierarchy')
+    WHERE EXISTS (
+        WITH RECURSIVE ancestors(id) AS (
+            SELECT NEW.parent_id
+            UNION ALL
+            SELECT parent_id FROM folders, ancestors WHERE folders.id = ancestors.id
+        )
+        SELECT 1 FROM ancestors WHERE id = NEW.id
+    );
+END;
+
 CREATE TABLE items (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -25,7 +42,7 @@ CREATE TABLE items (
     sort_order INTEGER DEFAULT 0,
 
     -- GTD workflow
-    status TEXT DEFAULT 'next_action', -- next_action, waiting, someday, completed
+    status TEXT DEFAULT 'next_action' CHECK(status IN ('next_action', 'waiting', 'someday', 'completed')),
     folder_id TEXT,
     context TEXT, -- @home, @work, @computer, etc.
 
@@ -38,7 +55,7 @@ CREATE TABLE items (
 
     -- Metadata
     is_project BOOLEAN DEFAULT 0,
-    energy_level TEXT, -- high, medium, low
+    energy_level TEXT CHECK(energy_level IN ('high', 'medium', 'low') OR energy_level IS NULL),
     time_estimate INTEGER, -- minutes
 
     FOREIGN KEY (parent_id) REFERENCES items(id) ON DELETE CASCADE,
@@ -70,6 +87,8 @@ CREATE TABLE item_tags (
 );
 
 -- Indexes for performance
+CREATE INDEX idx_folders_parent_id ON folders(parent_id);
+CREATE INDEX idx_folders_sort_order ON folders(sort_order);
 CREATE INDEX idx_parent_id ON items(parent_id);
 CREATE INDEX idx_status ON items(status);
 CREATE INDEX idx_folder_id ON items(folder_id);
