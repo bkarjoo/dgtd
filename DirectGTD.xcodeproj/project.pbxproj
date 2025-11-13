@@ -44,11 +44,6 @@
 			path = DirectGTDTests;
 			sourceTree = "<group>";
 		};
-		1EA4868B2EC43FAD0017F6CA /* DirectGTDUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = DirectGTDUITests;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -82,7 +77,6 @@
 			children = (
 				1EA486732EC43FAA0017F6CA /* DirectGTD */,
 				1EA486812EC43FAD0017F6CA /* DirectGTDTests */,
-				1EA4868B2EC43FAD0017F6CA /* DirectGTDUITests */,
 				1EA486722EC43FAA0017F6CA /* Products */,
 			);
 			sourceTree = "<group>";
@@ -158,9 +152,6 @@
 			);
 			dependencies = (
 				1EA4868A2EC43FAD0017F6CA /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				1EA4868B2EC43FAD0017F6CA /* DirectGTDUITests */,
 			);
 			name = DirectGTDUITests;
 			packageProductDependencies = (
