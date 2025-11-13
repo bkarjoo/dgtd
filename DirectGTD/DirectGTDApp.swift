@@ -10,17 +10,18 @@ import SwiftUI
 @main
 struct DirectGTDApp: App {
     init() {
+        NSLog("DirectGTDApp: Program started")
         // Initialize database on app launch
         _ = Database.shared
-        print("DirectGTDApp: Database initialized")
+        NSLog("DirectGTDApp: Database initialized")
 
         // Seed database with sample data (only on first launch)
         let seeder = DatabaseSeeder()
         do {
             try seeder.seed()
-            print("DirectGTDApp: Seeding completed")
+            NSLog("DirectGTDApp: Seeding completed")
         } catch {
-            print("DirectGTDApp: Seeding error: \(error)")
+            NSLog("DirectGTDApp: Seeding error: \(error)")
         }
     }
 
