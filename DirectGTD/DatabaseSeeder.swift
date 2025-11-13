@@ -10,6 +10,7 @@ class DatabaseSeeder {
     func seed() throws {
         // Check if already seeded
         let folders = try repository.getAllFolders()
+        print("DatabaseSeeder: Found \(folders.count) existing folders")
         if !folders.isEmpty {
             print("Database already contains data, skipping seed")
             return

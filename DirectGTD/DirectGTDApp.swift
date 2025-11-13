@@ -12,10 +12,16 @@ struct DirectGTDApp: App {
     init() {
         // Initialize database on app launch
         _ = Database.shared
+        print("DirectGTDApp: Database initialized")
 
         // Seed database with sample data (only on first launch)
         let seeder = DatabaseSeeder()
-        try? seeder.seed()
+        do {
+            try seeder.seed()
+            print("DirectGTDApp: Seeding completed")
+        } catch {
+            print("DirectGTDApp: Seeding error: \(error)")
+        }
     }
 
     var body: some Scene {

@@ -5,27 +5,74 @@ struct FolderTreeView: View {
     private let repository = ItemRepository()
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(visibleFolders(), id: \.folder.id) { item in
-                    FolderRow(
-                        folder: item.folder,
-                        depth: item.depth,
-                        toggle: { toggleFolder(item.folder) }
-                    )
+        VStack {
+            if folders.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "folder.badge.questionmark")
+                        .font(.system(size: 48))
+                        .foregroundColor(.secondary)
+                    Text("No folders found")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                    Text("Database may be empty")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(visibleFolders(), id: \.folder.id) { item in
+                            FolderRow(
+                                folder: item.folder,
+                                depth: item.depth,
+                                toggle: { toggleFolder(item.folder) }
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 8)
                 }
             }
-            .padding(.horizontal, 8)
         }
         .navigationTitle("Folders")
+        .toolbar {
+            ToolbarItem {
+                Button("Reset DB") {
+                    resetDatabase()
+                }
+            }
+        }
         .onAppear {
             loadFolders()
+        }
+    }
+
+    private func resetDatabase() {
+        do {
+            // Delete all folders
+            let allFolders = try repository.getAllFolders()
+            for folder in allFolders {
+                try repository.deleteFolder(folderId: folder.id)
+            }
+
+            // Reseed
+            let seeder = DatabaseSeeder()
+            try seeder.seed()
+
+            // Reload
+            loadFolders()
+        } catch {
+            print("Error resetting database: \(error)")
         }
     }
 
     private func loadFolders() {
         do {
             folders = try repository.getAllFolders()
+            print("Loaded \(folders.count) folders from database")
+            for folder in folders {
+                print("  - \(folder.name) (id: \(folder.id), parent: \(folder.parentId ?? "nil"))")
+            }
         } catch {
             print("Error loading folders: \(error)")
         }
