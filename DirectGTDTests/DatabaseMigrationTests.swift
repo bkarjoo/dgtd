@@ -127,8 +127,10 @@ struct DatabaseMigrationTests {
 
         // Verify tables still exist
         try dbQueue.read { db in
-            #expect(try db.tableExists("folders") == true)
-            #expect(try db.tableExists("items") == true)
+            let foldersExist = try db.tableExists("folders")
+            let itemsExist = try db.tableExists("items")
+            #expect(foldersExist == true)
+            #expect(itemsExist == true)
         }
     }
 
