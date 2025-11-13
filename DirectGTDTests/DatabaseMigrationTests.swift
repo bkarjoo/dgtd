@@ -5,6 +5,7 @@
 //  Test cases for GRDB DatabaseMigrator implementation
 //
 
+import Foundation
 import Testing
 import GRDB
 @testable import DirectGTD
@@ -24,11 +25,11 @@ struct DatabaseMigrationTests {
         // Expected Outcome: All 5 tables created, grdb_migrations contains "v1"
         try dbQueue.read { db in
             // Verify all required tables exist
-            #expect(try db.tableExists("folders"))
-            #expect(try db.tableExists("items"))
-            #expect(try db.tableExists("tags"))
-            #expect(try db.tableExists("notes"))
-            #expect(try db.tableExists("item_tags"))
+            #expect(try db.tableExists("folders") == true)
+            #expect(try db.tableExists("items") == true)
+            #expect(try db.tableExists("tags") == true)
+            #expect(try db.tableExists("notes") == true)
+            #expect(try db.tableExists("item_tags") == true)
 
             // Verify migration metadata
             let appliedMigrations = try migrator.appliedIdentifiers(db)
@@ -54,8 +55,8 @@ struct DatabaseMigrationTests {
             """)
 
             // Verify legacy tables exist
-            #expect(try db.tableExists("folders"))
-            #expect(try db.tableExists("items"))
+            #expect(try db.tableExists("folders") == true)
+            #expect(try db.tableExists("items") == true)
         }
 
         // Action: Detect legacy state and reset
@@ -92,8 +93,8 @@ struct DatabaseMigrationTests {
 
         // Expected Outcome: Tables recreated via migration, grdb_migrations contains "v1"
         try dbQueue.read { db in
-            #expect(try db.tableExists("folders"))
-            #expect(try db.tableExists("items"))
+            #expect(try db.tableExists("folders") == true)
+            #expect(try db.tableExists("items") == true)
 
             let appliedMigrations = try migrator.appliedIdentifiers(db)
             #expect(appliedMigrations.contains("v1"))
@@ -126,8 +127,8 @@ struct DatabaseMigrationTests {
 
         // Verify tables still exist
         try dbQueue.read { db in
-            #expect(try db.tableExists("folders"))
-            #expect(try db.tableExists("items"))
+            #expect(try db.tableExists("folders") == true)
+            #expect(try db.tableExists("items") == true)
         }
     }
 
@@ -155,7 +156,7 @@ struct DatabaseMigrationTests {
             #expect(appliedMigrations.count == 2)
 
             // Verify v2 table was created
-            #expect(try db.tableExists("test_v2"))
+            #expect(try db.tableExists("test_v2") == true)
         }
     }
 
@@ -191,9 +192,9 @@ struct DatabaseMigrationTests {
             #expect(!appliedMigrations.contains("v2_broken"))
 
             // Verify database is still in valid state with v1
-            #expect(try db.tableExists("folders"))
+            #expect(try db.tableExists("folders") == true)
             let testBrokenExists = try db.tableExists("test_broken")
-            #expect(!testBrokenExists)
+            #expect(testBrokenExists == false)
         }
     }
 
