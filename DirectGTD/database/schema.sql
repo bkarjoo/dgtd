@@ -32,6 +32,22 @@ BEGIN
     );
 END;
 
+CREATE TRIGGER prevent_folder_circular_reference_insert
+BEFORE INSERT ON folders
+FOR EACH ROW
+WHEN NEW.parent_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'Circular reference detected in folder hierarchy')
+    WHERE EXISTS (
+        WITH RECURSIVE ancestors(id) AS (
+            SELECT NEW.parent_id
+            UNION ALL
+            SELECT parent_id FROM folders, ancestors WHERE folders.id = ancestors.id
+        )
+        SELECT 1 FROM ancestors WHERE id = NEW.id
+    );
+END;
+
 CREATE TABLE items (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
