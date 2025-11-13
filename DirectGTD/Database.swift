@@ -30,76 +30,116 @@ class Database {
     }
 
     private func setupDatabase() throws {
-        guard let schemaURL = Bundle.main.url(forResource: "schema", withExtension: "sql") else {
-            NSLog("Database: ERROR - schema.sql not found in bundle")
-            fatalError("schema.sql not found in bundle")
+        guard let dbQueue = dbQueue else {
+            NSLog("Database: ERROR - DatabaseQueue is nil")
+            throw DatabaseError.queueNotInitialized
         }
 
-        NSLog("Database: Found schema at: \(schemaURL.path)")
+        NSLog("Database: Starting migration setup")
 
-        let schema = try String(contentsOf: schemaURL, encoding: .utf8)
-        NSLog("Database: Schema loaded, length: \(schema.count) characters")
+        // Create and configure the migrator
+        var migrator = DatabaseMigrator()
 
-        try dbQueue?.write { db in
-            // Check if ALL required tables exist
-            let requiredTables = ["folders", "items", "tags", "notes", "item_tags"]
-            var missingTables: [String] = []
-            var existingTables: [String] = []
+        // Register v1 migration (baseline schema)
+        migrator.registerMigration("v1") { db in
+            NSLog("Database: Running migration v1 (baseline schema)")
 
-            for tableName in requiredTables {
-                let exists = try db.tableExists(tableName)
-                if exists {
-                    existingTables.append(tableName)
-                } else {
-                    missingTables.append(tableName)
-                }
-                NSLog("Database: Table '\(tableName)' exists: \(exists)")
+            guard let schemaURL = Bundle.main.url(forResource: "schema", withExtension: "sql") else {
+                NSLog("Database: ERROR - schema.sql not found in bundle")
+                throw DatabaseError.schemaNotFound
             }
 
-            // If any tables are missing, we need to migrate
-            if !missingTables.isEmpty {
-                NSLog("Database: Migration needed - missing tables: \(missingTables.joined(separator: ", "))")
+            let schema = try String(contentsOf: schemaURL, encoding: .utf8)
+            NSLog("Database: Schema loaded, length: \(schema.count) characters")
 
-                // Drop all existing tables to ensure clean slate
-                // Drop in reverse order to handle foreign keys properly
+            try db.execute(sql: schema)
+            NSLog("Database: Migration v1 completed successfully")
+        }
+
+        // Handle backward compatibility: Detect legacy databases and reset them
+        try dbQueue.write { db in
+            // State Detection Step 1: Check if grdb_migrations table exists
+            let hasMigrationMetadata = try db.tableExists("grdb_migrations")
+            NSLog("Database: Migration metadata exists: \(hasMigrationMetadata)")
+
+            if !hasMigrationMetadata {
+                // State Detection Step 2: Check if any legacy tables exist
+                let requiredTables = ["folders", "items", "tags", "notes", "item_tags"]
+                var existingTables: [String] = []
+
+                for tableName in requiredTables {
+                    let exists = try db.tableExists(tableName)
+                    if exists {
+                        existingTables.append(tableName)
+                    }
+                }
+
                 if !existingTables.isEmpty {
-                    NSLog("Database: Dropping existing tables: \(existingTables.joined(separator: ", "))")
+                    // Legacy database detected: Drop all tables for clean transition
+                    NSLog("Database: Legacy database detected with tables: \(existingTables.joined(separator: ", "))")
+                    NSLog("Database: Performing one-time reset for migration system transition")
 
-                    // Disable foreign keys temporarily to allow dropping tables
+                    // Disable foreign keys temporarily
                     try db.execute(sql: "PRAGMA foreign_keys = OFF")
-                    NSLog("Database: Disabled foreign keys for migration")
+                    NSLog("Database: Disabled foreign keys for table dropping")
 
-                    // Drop tables in reverse order (dependencies first)
+                    // Drop tables in reverse dependency order
                     let dropOrder = ["item_tags", "notes", "tags", "items", "folders"]
                     for tableName in dropOrder {
                         if existingTables.contains(tableName) {
                             do {
                                 try db.execute(sql: "DROP TABLE IF EXISTS \(tableName)")
-                                NSLog("Database: Dropped table '\(tableName)'")
+                                NSLog("Database: Dropped legacy table '\(tableName)'")
                             } catch {
                                 NSLog("Database: WARNING - Failed to drop table '\(tableName)': \(error)")
                             }
                         }
                     }
 
+                    // Drop triggers if they exist
+                    let triggers = ["prevent_folder_circular_reference", "prevent_folder_circular_reference_insert"]
+                    for triggerName in triggers {
+                        do {
+                            try db.execute(sql: "DROP TRIGGER IF EXISTS \(triggerName)")
+                            NSLog("Database: Dropped trigger '\(triggerName)'")
+                        } catch {
+                            NSLog("Database: WARNING - Failed to drop trigger '\(triggerName)': \(error)")
+                        }
+                    }
+
                     // Re-enable foreign keys
                     try db.execute(sql: "PRAGMA foreign_keys = ON")
                     NSLog("Database: Re-enabled foreign keys")
-                }
-
-                // Execute the full schema to create all tables
-                NSLog("Database: Creating fresh schema...")
-                do {
-                    try db.execute(sql: schema)
-                    NSLog("Database: Schema created successfully")
-                } catch {
-                    NSLog("Database: FATAL ERROR - Schema creation failed: \(error)")
-                    throw error
+                    NSLog("Database: Legacy tables cleaned up successfully")
+                } else {
+                    NSLog("Database: Fresh install detected (no tables, no metadata)")
                 }
             } else {
-                NSLog("Database: All required tables exist, no migration needed")
+                NSLog("Database: Migrated database detected, using standard GRDB migration logic")
             }
         }
+
+        // Apply all pending migrations
+        NSLog("Database: Applying pending migrations...")
+        do {
+            try migrator.migrate(dbQueue)
+            NSLog("Database: Migration system completed successfully")
+
+            // Log applied migrations for debugging
+            try dbQueue.read { db in
+                let appliedMigrations = try migrator.appliedIdentifiers(db)
+                NSLog("Database: Applied migrations: \(appliedMigrations.joined(separator: ", "))")
+            }
+        } catch {
+            NSLog("Database: FATAL ERROR - Migration failed: \(error)")
+            throw error
+        }
+    }
+
+    // Error types for better error handling
+    enum DatabaseError: Error {
+        case queueNotInitialized
+        case schemaNotFound
     }
 
     func getQueue() -> DatabaseQueue? {
