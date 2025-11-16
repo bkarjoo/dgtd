@@ -1,10 +1,76 @@
 import Foundation
 
+// MARK: - Seed Data Models
+struct SeedData: Codable {
+    let folders: [FolderSeed]
+    let tags: [TagSeed]
+    let inboxItems: [InboxItemSeed]
+    let projects: [ProjectSeed]
+    let nextActions: [ItemSeed]
+    let waitingItems: [ItemSeed]
+    let somedayItems: [ItemSeed]
+    let referenceItems: [ItemSeed]
+    let completedItems: [ItemSeed]
+}
+
+struct FolderSeed: Codable {
+    let name: String
+    let icon: String
+    let color: String
+    let sortOrder: Int
+}
+
+struct TagSeed: Codable {
+    let name: String
+    let color: String
+}
+
+struct InboxItemSeed: Codable {
+    let title: String
+    let description: String?
+    let tags: [String]?
+}
+
+struct ProjectSeed: Codable {
+    let title: String
+    let description: String?
+    let status: String
+    let folder: String
+    let context: String?
+    let tags: [String]?
+    let subItems: [SubItemSeed]?
+    let notes: [NoteSeed]?
+}
+
+struct SubItemSeed: Codable {
+    let title: String
+    let description: String?
+}
+
+struct NoteSeed: Codable {
+    let content: String
+}
+
+struct ItemSeed: Codable {
+    let title: String
+    let description: String?
+    let status: String
+    let folder: String
+    let context: String?
+    let dueInDays: Int?
+    let timeEstimate: Int?
+    let energyLevel: String?
+    let tags: [String]?
+    let completedDaysAgo: Int?
+}
+
 class DatabaseSeeder {
     private let repository: ItemRepository
+    private let configFileName: String
 
-    init(repository: ItemRepository = ItemRepository()) {
+    init(repository: ItemRepository = ItemRepository(), configFileName: String = "SeedData.json") {
         self.repository = repository
+        self.configFileName = configFileName
     }
 
     func seed() throws {
@@ -18,180 +84,167 @@ class DatabaseSeeder {
 
         print("Seeding database with sample data...")
 
-        // Create default folders (fully customizable by user)
-        let inboxFolder = Folder(name: "Inbox", icon: "tray", color: "#3B82F6", sortOrder: 0)
-        let projectsFolder = Folder(name: "Projects", icon: "folder", color: "#8B5CF6", sortOrder: 1)
-        let referenceFolder = Folder(name: "Reference", icon: "doc.text", color: "#10B981", sortOrder: 2)
-        let trashFolder = Folder(name: "Trash", icon: "trash", color: "#EF4444", sortOrder: 3)
+        // Load seed data from config file
+        let seedData = try loadSeedData()
 
-        try repository.createFolder(inboxFolder)
-        try repository.createFolder(projectsFolder)
-        try repository.createFolder(referenceFolder)
-        try repository.createFolder(trashFolder)
+        // Create folders and store them in a dictionary
+        var folderMap: [String: Folder] = [:]
+        for folderSeed in seedData.folders {
+            let folder = Folder(
+                name: folderSeed.name,
+                icon: folderSeed.icon,
+                color: folderSeed.color,
+                sortOrder: folderSeed.sortOrder
+            )
+            try repository.createFolder(folder)
+            folderMap[folderSeed.name] = folder
+        }
 
-        // Create some tags
-        let workTag = Tag(name: "work", color: "#3B82F6")
-        let personalTag = Tag(name: "personal", color: "#10B981")
-        let urgentTag = Tag(name: "urgent", color: "#EF4444")
+        // Create tags and store them in a dictionary
+        var tagMap: [String: Tag] = [:]
+        for tagSeed in seedData.tags {
+            let tag = Tag(name: tagSeed.name, color: tagSeed.color)
+            try repository.createTag(tag)
+            tagMap[tagSeed.name] = tag
+        }
 
-        try repository.createTag(workTag)
-        try repository.createTag(personalTag)
-        try repository.createTag(urgentTag)
+        // Create inbox items
+        for inboxItemSeed in seedData.inboxItems {
+            let item = try repository.addToInbox(
+                title: inboxItemSeed.title,
+                description: inboxItemSeed.description
+            )
 
-        // Inbox items
-        let inboxItem1 = try repository.addToInbox(
-            title: "Review quarterly budget",
-            description: "Need to go through Q4 numbers before Friday meeting"
-        )
-        try repository.addTagToItem(itemId: inboxItem1.id, tagId: workTag.id)
-        try repository.addTagToItem(itemId: inboxItem1.id, tagId: urgentTag.id)
+            // Add tags if specified
+            if let tagNames = inboxItemSeed.tags {
+                for tagName in tagNames {
+                    if let tag = tagMap[tagName] {
+                        try repository.addTagToItem(itemId: item.id, tagId: tag.id)
+                    }
+                }
+            }
+        }
 
-        let inboxItem2 = try repository.addToInbox(
-            title: "Call dentist for appointment",
-            description: "Overdue for cleaning"
-        )
-        try repository.addTagToItem(itemId: inboxItem2.id, tagId: personalTag.id)
+        // Create projects
+        for projectSeed in seedData.projects {
+            guard let folder = folderMap[projectSeed.folder] else {
+                print("Warning: Folder '\(projectSeed.folder)' not found for project '\(projectSeed.title)'")
+                continue
+            }
 
-        let inboxItem3 = try repository.addToInbox(
-            title: "Research new project management tools"
-        )
-        try repository.addTagToItem(itemId: inboxItem3.id, tagId: workTag.id)
+            let project = Item(
+                title: projectSeed.title,
+                description: projectSeed.description,
+                status: projectSeed.status,
+                folderId: folder.id,
+                context: projectSeed.context,
+                isProject: true
+            )
+            try repository.create(project)
 
-        // Create a project with sub-items
-        var websiteProject = Item(
-            title: "Redesign company website",
-            description: "Complete overhaul of company site with modern design",
-            status: "next_action",
-            folderId: projectsFolder.id,
-            context: "@computer",
-            isProject: true
-        )
-        try repository.create(websiteProject)
-        try repository.addTagToItem(itemId: websiteProject.id, tagId: workTag.id)
+            // Add tags
+            if let tagNames = projectSeed.tags {
+                for tagName in tagNames {
+                    if let tag = tagMap[tagName] {
+                        try repository.addTagToItem(itemId: project.id, tagId: tag.id)
+                    }
+                }
+            }
 
-        let subItem1 = try repository.addSubItem(
-            parentId: websiteProject.id,
-            title: "Create wireframes for homepage",
-            description: "Work with design team"
-        )
+            // Add sub-items
+            if let subItems = projectSeed.subItems {
+                for subItemSeed in subItems {
+                    _ = try repository.addSubItem(
+                        parentId: project.id,
+                        title: subItemSeed.title,
+                        description: subItemSeed.description
+                    )
+                }
+            }
 
-        let subItem2 = try repository.addSubItem(
-            parentId: websiteProject.id,
-            title: "Review hosting options",
-            description: "Compare pricing for Vercel, Netlify, AWS"
-        )
+            // Add notes
+            if let notes = projectSeed.notes {
+                for noteSeed in notes {
+                    let note = Note(itemId: project.id, content: noteSeed.content)
+                    try repository.createNote(note)
+                }
+            }
+        }
 
-        let subItem3 = try repository.addSubItem(
-            parentId: websiteProject.id,
-            title: "Set up staging environment"
-        )
+        // Create next actions
+        for actionSeed in seedData.nextActions {
+            try createItemFromSeed(actionSeed, folderMap: folderMap, tagMap: tagMap)
+        }
 
-        // Add a note to the project
-        let projectNote = Note(
-            itemId: websiteProject.id,
-            content: "Discussed with team - targeting launch date of March 1st. Budget approved for $5000."
-        )
-        try repository.createNote(projectNote)
+        // Create waiting items
+        for waitingSeed in seedData.waitingItems {
+            try createItemFromSeed(waitingSeed, folderMap: folderMap, tagMap: tagMap)
+        }
 
-        // Next actions
-        var nextAction1 = Item(
-            title: "Send proposal to client",
-            description: "Follow up on last week's meeting",
-            status: "next_action",
-            folderId: projectsFolder.id,
-            context: "@computer",
-            dueDate: Int(Date().addingTimeInterval(86400 * 3).timeIntervalSince1970) // 3 days from now
-        )
-        try repository.create(nextAction1)
-        try repository.addTagToItem(itemId: nextAction1.id, tagId: workTag.id)
-        try repository.addTagToItem(itemId: nextAction1.id, tagId: urgentTag.id)
+        // Create someday items
+        for somedaySeed in seedData.somedayItems {
+            try createItemFromSeed(somedaySeed, folderMap: folderMap, tagMap: tagMap)
+        }
 
-        var nextAction2 = Item(
-            title: "Buy groceries",
-            status: "next_action",
-            folderId: projectsFolder.id,
-            context: "@errands",
-            timeEstimate: 45
-        )
-        try repository.create(nextAction2)
-        try repository.addTagToItem(itemId: nextAction2.id, tagId: personalTag.id)
+        // Create reference items
+        for referenceSeed in seedData.referenceItems {
+            try createItemFromSeed(referenceSeed, folderMap: folderMap, tagMap: tagMap)
+        }
 
-        var nextAction3 = Item(
-            title: "Review pull requests",
-            description: "Check PRs from the team",
-            status: "next_action",
-            folderId: projectsFolder.id,
-            context: "@computer",
-            energyLevel: "medium",
-            timeEstimate: 30
-        )
-        try repository.create(nextAction3)
-        try repository.addTagToItem(itemId: nextAction3.id, tagId: workTag.id)
-
-        // Waiting items
-        var waitingItem1 = Item(
-            title: "Feedback from Sarah on design mockups",
-            status: "waiting",
-            folderId: projectsFolder.id,
-            context: "@waiting"
-        )
-        try repository.create(waitingItem1)
-        try repository.addTagToItem(itemId: waitingItem1.id, tagId: workTag.id)
-
-        var waitingItem2 = Item(
-            title: "Approval for vacation request",
-            status: "waiting",
-            folderId: projectsFolder.id,
-            context: "@waiting"
-        )
-        try repository.create(waitingItem2)
-        try repository.addTagToItem(itemId: waitingItem2.id, tagId: personalTag.id)
-
-        // Someday/Maybe items
-        var somedayItem1 = Item(
-            title: "Learn SwiftUI animations",
-            status: "someday",
-            folderId: projectsFolder.id
-        )
-        try repository.create(somedayItem1)
-        try repository.addTagToItem(itemId: somedayItem1.id, tagId: personalTag.id)
-
-        var somedayItem2 = Item(
-            title: "Write blog post about GTD methodology",
-            status: "someday",
-            folderId: projectsFolder.id
-        )
-        try repository.create(somedayItem2)
-        try repository.addTagToItem(itemId: somedayItem2.id, tagId: workTag.id)
-
-        // Reference items
-        var referenceItem1 = Item(
-            title: "Password manager master password",
-            description: "Stored in secure location",
-            status: "next_action",
-            folderId: referenceFolder.id
-        )
-        try repository.create(referenceItem1)
-
-        var referenceItem2 = Item(
-            title: "Meeting notes from 2025-11-05",
-            description: "Quarterly planning session",
-            status: "next_action",
-            folderId: referenceFolder.id
-        )
-        try repository.create(referenceItem2)
-        try repository.addTagToItem(itemId: referenceItem2.id, tagId: workTag.id)
-
-        // Completed item
-        var completedItem = Item(
-            title: "Complete onboarding documentation",
-            status: "completed",
-            folderId: projectsFolder.id,
-            completedAt: Int(Date().addingTimeInterval(-86400).timeIntervalSince1970) // completed yesterday
-        )
-        try repository.create(completedItem)
-        try repository.addTagToItem(itemId: completedItem.id, tagId: workTag.id)
+        // Create completed items
+        for completedSeed in seedData.completedItems {
+            try createItemFromSeed(completedSeed, folderMap: folderMap, tagMap: tagMap)
+        }
 
         print("Database seeded successfully with sample GTD data!")
+    }
+
+    private func loadSeedData() throws -> SeedData {
+        guard let url = Bundle.main.url(forResource: configFileName.replacingOccurrences(of: ".json", with: ""), withExtension: "json") else {
+            throw NSError(domain: "DatabaseSeeder", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not find \(configFileName) in bundle"])
+        }
+
+        let data = try Data(contentsOf: url)
+        let decoder = JSONDecoder()
+        return try decoder.decode(SeedData.self, from: data)
+    }
+
+    private func createItemFromSeed(_ itemSeed: ItemSeed, folderMap: [String: Folder], tagMap: [String: Tag]) throws {
+        guard let folder = folderMap[itemSeed.folder] else {
+            print("Warning: Folder '\(itemSeed.folder)' not found for item '\(itemSeed.title)'")
+            return
+        }
+
+        var dueDate: Int?
+        if let dueInDays = itemSeed.dueInDays {
+            dueDate = Int(Date().addingTimeInterval(86400 * Double(dueInDays)).timeIntervalSince1970)
+        }
+
+        var completedAt: Int?
+        if let completedDaysAgo = itemSeed.completedDaysAgo {
+            completedAt = Int(Date().addingTimeInterval(-86400 * Double(completedDaysAgo)).timeIntervalSince1970)
+        }
+
+        var item = Item(
+            title: itemSeed.title,
+            description: itemSeed.description,
+            status: itemSeed.status,
+            folderId: folder.id,
+            context: itemSeed.context,
+            completedAt: completedAt,
+            dueDate: dueDate,
+            energyLevel: itemSeed.energyLevel,
+            timeEstimate: itemSeed.timeEstimate
+        )
+        try repository.create(item)
+
+        // Add tags
+        if let tagNames = itemSeed.tags {
+            for tagName in tagNames {
+                if let tag = tagMap[tagName] {
+                    try repository.addTagToItem(itemId: item.id, tagId: tag.id)
+                }
+            }
+        }
     }
 }
