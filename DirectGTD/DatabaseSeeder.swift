@@ -1,5 +1,44 @@
 import Foundation
 
+// MARK: - Seed Data Error
+enum SeedDataError: LocalizedError {
+    case configFileNotFound(String)
+    case invalidJSON(String)
+    case invalidFolderReference(itemTitle: String, folderName: String)
+    case invalidTagReference(itemTitle: String, tagName: String)
+    case duplicateFolderName(String)
+    case duplicateTagName(String)
+    case invalidStatusValue(itemTitle: String, status: String)
+    case invalidColorFormat(name: String, color: String)
+    case invalidEnergyLevel(itemTitle: String, energyLevel: String)
+    case invalidNumericRange(itemTitle: String, field: String, value: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .configFileNotFound(let fileName):
+            return "Seed data configuration file '\(fileName)' not found in bundle"
+        case .invalidJSON(let details):
+            return "Failed to parse seed data JSON: \(details)"
+        case .invalidFolderReference(let itemTitle, let folderName):
+            return "Item '\(itemTitle)' references non-existent folder '\(folderName)'"
+        case .invalidTagReference(let itemTitle, let tagName):
+            return "Item '\(itemTitle)' references non-existent tag '\(tagName)'"
+        case .duplicateFolderName(let name):
+            return "Duplicate folder name found: '\(name)'"
+        case .duplicateTagName(let name):
+            return "Duplicate tag name found: '\(name)'"
+        case .invalidStatusValue(let itemTitle, let status):
+            return "Item '\(itemTitle)' has invalid status '\(status)'. Valid values are: next_action, waiting, someday, completed"
+        case .invalidColorFormat(let name, let color):
+            return "'\(name)' has invalid color format '\(color)'. Expected format: #RRGGBB (e.g., #3B82F6)"
+        case .invalidEnergyLevel(let itemTitle, let energyLevel):
+            return "Item '\(itemTitle)' has invalid energy level '\(energyLevel)'. Valid values are: low, medium, high"
+        case .invalidNumericRange(let itemTitle, let field, let value):
+            return "Item '\(itemTitle)' has invalid value for \(field): \(value). Must be between 0 and 365"
+        }
+    }
+}
+
 // MARK: - Seed Data Models
 struct SeedData: Codable {
     let folders: [FolderSeed]
@@ -90,6 +129,14 @@ class DatabaseSeeder {
         // Create folders and store them in a dictionary
         var folderMap: [String: Folder] = [:]
         for folderSeed in seedData.folders {
+            // Check for duplicate folder names
+            guard folderMap[folderSeed.name] == nil else {
+                throw SeedDataError.duplicateFolderName(folderSeed.name)
+            }
+
+            // Validate color format
+            try validateColorFormat(folderSeed.color, for: "Folder '\(folderSeed.name)'")
+
             let folder = Folder(
                 name: folderSeed.name,
                 icon: folderSeed.icon,
@@ -103,6 +150,14 @@ class DatabaseSeeder {
         // Create tags and store them in a dictionary
         var tagMap: [String: Tag] = [:]
         for tagSeed in seedData.tags {
+            // Check for duplicate tag names
+            guard tagMap[tagSeed.name] == nil else {
+                throw SeedDataError.duplicateTagName(tagSeed.name)
+            }
+
+            // Validate color format
+            try validateColorFormat(tagSeed.color, for: "Tag '\(tagSeed.name)'")
+
             let tag = Tag(name: tagSeed.name, color: tagSeed.color)
             try repository.createTag(tag)
             tagMap[tagSeed.name] = tag
@@ -118,19 +173,23 @@ class DatabaseSeeder {
             // Add tags if specified
             if let tagNames = inboxItemSeed.tags {
                 for tagName in tagNames {
-                    if let tag = tagMap[tagName] {
-                        try repository.addTagToItem(itemId: item.id, tagId: tag.id)
+                    guard let tag = tagMap[tagName] else {
+                        throw SeedDataError.invalidTagReference(itemTitle: inboxItemSeed.title, tagName: tagName)
                     }
+                    try repository.addTagToItem(itemId: item.id, tagId: tag.id)
                 }
             }
         }
 
         // Create projects
         for projectSeed in seedData.projects {
+            // Validate folder reference
             guard let folder = folderMap[projectSeed.folder] else {
-                print("Warning: Folder '\(projectSeed.folder)' not found for project '\(projectSeed.title)'")
-                continue
+                throw SeedDataError.invalidFolderReference(itemTitle: projectSeed.title, folderName: projectSeed.folder)
             }
+
+            // Validate status
+            try validateStatus(projectSeed.status, for: projectSeed.title)
 
             let project = Item(
                 title: projectSeed.title,
@@ -145,9 +204,10 @@ class DatabaseSeeder {
             // Add tags
             if let tagNames = projectSeed.tags {
                 for tagName in tagNames {
-                    if let tag = tagMap[tagName] {
-                        try repository.addTagToItem(itemId: project.id, tagId: tag.id)
+                    guard let tag = tagMap[tagName] else {
+                        throw SeedDataError.invalidTagReference(itemTitle: projectSeed.title, tagName: tagName)
                     }
+                    try repository.addTagToItem(itemId: project.id, tagId: tag.id)
                 }
             }
 
@@ -201,27 +261,76 @@ class DatabaseSeeder {
 
     private func loadSeedData() throws -> SeedData {
         guard let url = Bundle.main.url(forResource: configFileName.replacingOccurrences(of: ".json", with: ""), withExtension: "json") else {
-            throw NSError(domain: "DatabaseSeeder", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not find \(configFileName) in bundle"])
+            throw SeedDataError.configFileNotFound(configFileName)
         }
 
         let data = try Data(contentsOf: url)
         let decoder = JSONDecoder()
-        return try decoder.decode(SeedData.self, from: data)
+        do {
+            return try decoder.decode(SeedData.self, from: data)
+        } catch {
+            throw SeedDataError.invalidJSON(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Validation Helper Methods
+
+    private func validateStatus(_ status: String, for itemTitle: String) throws {
+        let validStatuses = ["next_action", "waiting", "someday", "completed"]
+        guard validStatuses.contains(status) else {
+            throw SeedDataError.invalidStatusValue(itemTitle: itemTitle, status: status)
+        }
+    }
+
+    private func validateColorFormat(_ color: String, for name: String) throws {
+        let hexColorRegex = "^#[0-9A-Fa-f]{6}$"
+        let predicate = NSPredicate(format: "SELF MATCHES %@", hexColorRegex)
+        guard predicate.evaluate(with: color) else {
+            throw SeedDataError.invalidColorFormat(name: name, color: color)
+        }
+    }
+
+    private func validateEnergyLevel(_ energyLevel: String, for itemTitle: String) throws {
+        let validLevels = ["low", "medium", "high"]
+        guard validLevels.contains(energyLevel) else {
+            throw SeedDataError.invalidEnergyLevel(itemTitle: itemTitle, energyLevel: energyLevel)
+        }
+    }
+
+    private func validateNumericRange(_ value: Int, field: String, for itemTitle: String) throws {
+        guard value >= 0 && value <= 365 else {
+            throw SeedDataError.invalidNumericRange(itemTitle: itemTitle, field: field, value: value)
+        }
     }
 
     private func createItemFromSeed(_ itemSeed: ItemSeed, folderMap: [String: Folder], tagMap: [String: Tag]) throws {
+        // Validate folder reference
         guard let folder = folderMap[itemSeed.folder] else {
-            print("Warning: Folder '\(itemSeed.folder)' not found for item '\(itemSeed.title)'")
-            return
+            throw SeedDataError.invalidFolderReference(itemTitle: itemSeed.title, folderName: itemSeed.folder)
+        }
+
+        // Validate status
+        try validateStatus(itemSeed.status, for: itemSeed.title)
+
+        // Validate energy level if present
+        if let energyLevel = itemSeed.energyLevel {
+            try validateEnergyLevel(energyLevel, for: itemSeed.title)
+        }
+
+        // Validate numeric ranges
+        if let timeEstimate = itemSeed.timeEstimate {
+            try validateNumericRange(timeEstimate, field: "timeEstimate", for: itemSeed.title)
         }
 
         var dueDate: Int?
         if let dueInDays = itemSeed.dueInDays {
+            try validateNumericRange(dueInDays, field: "dueInDays", for: itemSeed.title)
             dueDate = Int(Date().addingTimeInterval(86400 * Double(dueInDays)).timeIntervalSince1970)
         }
 
         var completedAt: Int?
         if let completedDaysAgo = itemSeed.completedDaysAgo {
+            try validateNumericRange(completedDaysAgo, field: "completedDaysAgo", for: itemSeed.title)
             completedAt = Int(Date().addingTimeInterval(-86400 * Double(completedDaysAgo)).timeIntervalSince1970)
         }
 
@@ -241,9 +350,10 @@ class DatabaseSeeder {
         // Add tags
         if let tagNames = itemSeed.tags {
             for tagName in tagNames {
-                if let tag = tagMap[tagName] {
-                    try repository.addTagToItem(itemId: item.id, tagId: tag.id)
+                guard let tag = tagMap[tagName] else {
+                    throw SeedDataError.invalidTagReference(itemTitle: itemSeed.title, tagName: tagName)
                 }
+                try repository.addTagToItem(itemId: item.id, tagId: tag.id)
             }
         }
     }
