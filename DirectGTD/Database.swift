@@ -9,13 +9,15 @@ class Database {
     private init() {
         do {
             let fileManager = FileManager.default
-            let documentsPath = try fileManager.url(
-                for: .documentDirectory,
+            let appSupportPath = try fileManager.url(
+                for: .applicationSupportDirectory,
                 in: .userDomainMask,
                 appropriateFor: nil,
                 create: true
             )
-            let dbPath = documentsPath.appendingPathComponent("directgtd.sqlite").path
+            let appFolder = appSupportPath.appendingPathComponent("DirectGTD")
+            try fileManager.createDirectory(at: appFolder, withIntermediateDirectories: true)
+            let dbPath = appFolder.appendingPathComponent("directgtd.sqlite").path
 
             NSLog("Database: Initializing at path: \(dbPath)")
 

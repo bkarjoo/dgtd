@@ -8,19 +8,40 @@
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var store = ItemStore()
+    @State private var showingAddItem = false
+    @State private var newItemName = ""
+
     var body: some View {
-        NavigationSplitView {
-            FolderTreeView()
-        } detail: {
-            VStack {
-                Image(systemName: "tray")
-                    .font(.system(size: 64))
-                    .foregroundColor(.secondary)
-                Text("Select a folder")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
+        VStack(spacing: 0) {
+            // Toolbar
+            HStack {
+                Spacer()
+                Button(action: { showingAddItem = true }) {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.plain)
+                .padding()
+            }
+            .border(Color.red)
+
+            // Tree view
+            TreeView(store: store)
+        }
+        .alert("New Item", isPresented: $showingAddItem) {
+            TextField("Enter name", text: $newItemName)
+            Button("Cancel", role: .cancel) {
+                newItemName = ""
+            }
+            Button("Add") {
+                addItem()
             }
         }
+    }
+
+    private func addItem() {
+        store.createItem(title: newItemName)
+        newItemName = ""
     }
 }
 

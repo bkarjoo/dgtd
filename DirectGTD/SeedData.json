@@ -1,27 +1,27 @@
 {
   "folders": [
     {
-      "name": "Inbox",
+      "name": "inbox",
       "icon": "tray",
       "color": "#3B82F6",
       "sortOrder": 0
     },
     {
-      "name": "Projects",
+      "name": "home projs",
       "icon": "folder",
       "color": "#8B5CF6",
       "sortOrder": 1
     },
     {
-      "name": "Reference",
-      "icon": "doc.text",
-      "color": "#10B981",
+      "name": "work projs",
+      "icon": "folder",
+      "color": "#6366F1",
       "sortOrder": 2
     },
     {
-      "name": "Trash",
-      "icon": "trash",
-      "color": "#EF4444",
+      "name": "ref",
+      "icon": "doc.text",
+      "color": "#10B981",
       "sortOrder": 3
     }
   ],
@@ -60,7 +60,7 @@
       "title": "Redesign company website",
       "description": "Complete overhaul of company site with modern design",
       "status": "next_action",
-      "folder": "Projects",
+      "folder": "home projs",
       "context": "@computer",
       "tags": ["work"],
       "subItems": [
@@ -88,7 +88,7 @@
       "title": "Send proposal to client",
       "description": "Follow up on last week's meeting",
       "status": "next_action",
-      "folder": "Projects",
+      "folder": "home projs",
       "context": "@computer",
       "dueInDays": 3,
       "tags": ["work", "urgent"]
@@ -96,7 +96,7 @@
     {
       "title": "Buy groceries",
       "status": "next_action",
-      "folder": "Projects",
+      "folder": "home projs",
       "context": "@errands",
       "timeEstimate": 45,
       "tags": ["personal"]
@@ -105,7 +105,7 @@
       "title": "Review pull requests",
       "description": "Check PRs from the team",
       "status": "next_action",
-      "folder": "Projects",
+      "folder": "home projs",
       "context": "@computer",
       "energyLevel": "medium",
       "timeEstimate": 30,
@@ -116,14 +116,14 @@
     {
       "title": "Feedback from Sarah on design mockups",
       "status": "waiting",
-      "folder": "Projects",
+      "folder": "home projs",
       "context": "@waiting",
       "tags": ["work"]
     },
     {
       "title": "Approval for vacation request",
       "status": "waiting",
-      "folder": "Projects",
+      "folder": "home projs",
       "context": "@waiting",
       "tags": ["personal"]
     }
@@ -132,13 +132,13 @@
     {
       "title": "Learn SwiftUI animations",
       "status": "someday",
-      "folder": "Projects",
+      "folder": "home projs",
       "tags": ["personal"]
     },
     {
       "title": "Write blog post about GTD methodology",
       "status": "someday",
-      "folder": "Projects",
+      "folder": "home projs",
       "tags": ["work"]
     }
   ],
@@ -147,13 +147,13 @@
       "title": "Password manager master password",
       "description": "Stored in secure location",
       "status": "next_action",
-      "folder": "Reference"
+      "folder": "ref"
     },
     {
       "title": "Meeting notes from 2025-11-05",
       "description": "Quarterly planning session",
       "status": "next_action",
-      "folder": "Reference",
+      "folder": "ref",
       "tags": ["work"]
     }
   ],
@@ -161,7 +161,7 @@
     {
       "title": "Complete onboarding documentation",
       "status": "completed",
-      "folder": "Projects",
+      "folder": "home projs",
       "completedDaysAgo": 1,
       "tags": ["work"]
     }

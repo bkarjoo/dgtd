@@ -11,18 +11,13 @@ import SwiftUI
 struct DirectGTDApp: App {
     init() {
         NSLog("DirectGTDApp: Program started")
+
+        // Disable automatic window tabbing
+        NSWindow.allowsAutomaticWindowTabbing = false
+
         // Initialize database on app launch
         _ = Database.shared
         NSLog("DirectGTDApp: Database initialized")
-
-        // Seed database with sample data (only on first launch)
-        let seeder = DatabaseSeeder()
-        do {
-            try seeder.seed()
-            NSLog("DirectGTDApp: Seeding completed")
-        } catch {
-            NSLog("DirectGTDApp: Seeding error: \(error)")
-        }
     }
 
     var body: some Scene {
