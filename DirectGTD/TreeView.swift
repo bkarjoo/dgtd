@@ -101,8 +101,14 @@ struct TreeView: View {
                 }
                 return .handled
             case .tab:
-                DispatchQueue.main.async {
-                    store.indentItem()
+                if keyPress.modifiers.contains(.shift) {
+                    DispatchQueue.main.async {
+                        store.outdentItem()
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        store.indentItem()
+                    }
                 }
                 return .handled
             default:

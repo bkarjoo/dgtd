@@ -162,6 +162,35 @@ class ItemStore: ObservableObject {
         }
     }
 
+    func outdentItem() {
+        guard let selectedId = selectedItemId,
+              let selectedItem = items.first(where: { $0.id == selectedId }),
+              let parentId = selectedItem.parentId,
+              let parent = items.first(where: { $0.id == parentId }) else { return }
+
+        // Promote item to be sibling of its parent
+        var updatedItem = selectedItem
+        updatedItem.parentId = parent.parentId
+        updatedItem.sortOrder = parent.sortOrder + 1
+
+        // Shift siblings of parent that come after it
+        let siblings = items.filter { $0.parentId == parent.parentId && $0.sortOrder > parent.sortOrder }
+        for var sibling in siblings {
+            sibling.sortOrder += 1
+            try? repository.update(sibling)
+        }
+
+        do {
+            try repository.update(updatedItem)
+            // Update in-memory
+            if let index = items.firstIndex(where: { $0.id == selectedId }) {
+                items[index] = updatedItem
+            }
+        } catch {
+            print("Error outdenting item: \(error)")
+        }
+    }
+
     func deleteSelectedItem() {
         guard let itemId = selectedItemId else { return }
 
