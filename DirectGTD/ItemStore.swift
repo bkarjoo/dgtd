@@ -139,15 +139,40 @@ class ItemStore: ObservableObject {
         guard let currentIndex = orderedItems.firstIndex(where: { $0.id == selectedId }),
               currentIndex > 0 else { return }
 
-        // Get the item above
-        let itemAbove = orderedItems[currentIndex - 1]
+        // Get current item's level (depth)
+        func getLevel(_ item: Item) -> Int {
+            var level = 0
+            var currentParentId = item.parentId
+            while let parentId = currentParentId {
+                level += 1
+                currentParentId = items.first(where: { $0.id == parentId })?.parentId
+            }
+            return level
+        }
 
-        // Make selected item a child of the item above
+        let currentLevel = getLevel(selectedItem)
+
+        // Find the first item above that has the same level
+        var newParent: Item?
+        for i in stride(from: currentIndex - 1, through: 0, by: -1) {
+            let itemAbove = orderedItems[i]
+            if getLevel(itemAbove) == currentLevel {
+                newParent = itemAbove
+                break
+            }
+        }
+
+        guard let parent = newParent else { return }
+
+        // Make selected item a child of that item
         var updatedItem = selectedItem
-        updatedItem.parentId = itemAbove.id
+        updatedItem.parentId = parent.id
+
+        // Auto-expand the parent so the indented item stays visible
+        expandedItemIds.insert(parent.id)
 
         // Find the highest sortOrder among existing children of the new parent
-        let existingChildren = items.filter { $0.parentId == itemAbove.id }
+        let existingChildren = items.filter { $0.parentId == parent.id }
         let maxSortOrder = existingChildren.map { $0.sortOrder }.max() ?? -1
         updatedItem.sortOrder = maxSortOrder + 1
 
@@ -163,10 +188,32 @@ class ItemStore: ObservableObject {
     }
 
     func outdentItem() {
-        guard let selectedId = selectedItemId,
-              let selectedItem = items.first(where: { $0.id == selectedId }),
-              let parentId = selectedItem.parentId,
-              let parent = items.first(where: { $0.id == parentId }) else { return }
+        NSLog("outdentItem() called")
+        NSLog("selectedItemId: \(selectedItemId ?? "nil")")
+
+        guard let selectedId = selectedItemId else {
+            NSLog("outdentItem: no selected item")
+            return
+        }
+
+        guard let selectedItem = items.first(where: { $0.id == selectedId }) else {
+            NSLog("outdentItem: selected item not found in items")
+            return
+        }
+
+        NSLog("selectedItem.parentId: \(selectedItem.parentId ?? "nil")")
+
+        guard let parentId = selectedItem.parentId else {
+            NSLog("outdentItem: item has no parent (already at root level)")
+            return
+        }
+
+        guard let parent = items.first(where: { $0.id == parentId }) else {
+            NSLog("outdentItem: parent item not found")
+            return
+        }
+
+        NSLog("outdentItem: promoting item to sibling of parent")
 
         // Promote item to be sibling of its parent
         var updatedItem = selectedItem

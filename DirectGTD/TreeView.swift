@@ -101,14 +101,15 @@ struct TreeView: View {
                 }
                 return .handled
             case .tab:
-                if keyPress.modifiers.contains(.shift) {
-                    DispatchQueue.main.async {
-                        store.outdentItem()
-                    }
-                } else {
-                    DispatchQueue.main.async {
-                        store.indentItem()
-                    }
+                NSLog("Tab detected - calling indentItem()")
+                DispatchQueue.main.async {
+                    store.indentItem()
+                }
+                return .handled
+            case KeyEquivalent("\u{19}"):
+                NSLog("Shift+Tab (backtab) detected - calling outdentItem()")
+                DispatchQueue.main.async {
+                    store.outdentItem()
                 }
                 return .handled
             default:
