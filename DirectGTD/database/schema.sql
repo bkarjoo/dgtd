@@ -4,6 +4,7 @@
 CREATE TABLE items (
     id TEXT PRIMARY KEY,
     title TEXT,
+    item_type TEXT DEFAULT 'Unknown',
 
     -- Hierarchy
     parent_id TEXT,
@@ -31,6 +32,11 @@ CREATE TABLE item_tags (
     PRIMARY KEY (item_id, tag_id),
     FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
     FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+
+CREATE TABLE app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
 );
 
 -- Indexes for performance

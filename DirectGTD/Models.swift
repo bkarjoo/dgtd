@@ -1,10 +1,44 @@
 import Foundation
 import GRDB
 
+// MARK: - ItemType Enum
+enum ItemType: String, Codable, CaseIterable {
+    case unknown = "Unknown"
+    case task = "Task"
+    case project = "Project"
+    case note = "Note"
+    case folder = "Folder"
+    case template = "Template"
+    case smartFolder = "SmartFolder"
+    case alias = "Alias"
+    case heading = "Heading"
+    case link = "Link"
+    case attachment = "Attachment"
+    case event = "Event"
+
+    var defaultIcon: String {
+        switch self {
+        case .unknown: return "questionmark.circle"
+        case .task: return "checkmark.circle"
+        case .project: return "folder"
+        case .note: return "doc.text"
+        case .folder: return "folder.fill"
+        case .template: return "doc.on.doc"
+        case .smartFolder: return "folder.badge.gearshape"
+        case .alias: return "link.circle"
+        case .heading: return "textformat.size"
+        case .link: return "link"
+        case .attachment: return "paperclip"
+        case .event: return "calendar"
+        }
+    }
+}
+
 // MARK: - Item Model
 struct Item: Codable, FetchableRecord, PersistableRecord {
     var id: String
     var title: String?
+    var itemType: ItemType
 
     // Hierarchy
     var parentId: String?
@@ -24,6 +58,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
     enum Columns {
         static let id = Column(CodingKeys.id)
         static let title = Column(CodingKeys.title)
+        static let itemType = Column(CodingKeys.itemType)
         static let parentId = Column(CodingKeys.parentId)
         static let sortOrder = Column(CodingKeys.sortOrder)
         static let createdAt = Column(CodingKeys.createdAt)
@@ -37,6 +72,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
     enum CodingKeys: String, CodingKey {
         case id
         case title
+        case itemType = "item_type"
         case parentId = "parent_id"
         case sortOrder = "sort_order"
         case createdAt = "created_at"
@@ -50,6 +86,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
     init(
         id: String = UUID().uuidString,
         title: String? = nil,
+        itemType: ItemType = .unknown,
         parentId: String? = nil,
         sortOrder: Int = 0,
         createdAt: Int = Int(Date().timeIntervalSince1970),
@@ -60,6 +97,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
     ) {
         self.id = id
         self.title = title
+        self.itemType = itemType
         self.parentId = parentId
         self.sortOrder = sortOrder
         self.createdAt = createdAt

@@ -6,10 +6,12 @@ class ItemStore: ObservableObject {
     @Published private(set) var items: [Item] = []
     @Published var selectedItemId: String?
     @Published var editingItemId: String?
-    @Published var expandedItemIds: Set<String> = []
+    @Published var showingQuickCapture: Bool = false
     private let repository = ItemRepository()
+    let settings: UserSettings
 
-    init() {
+    init(settings: UserSettings) {
+        self.settings = settings
         NSLog("ItemStore initialized - console is working!")
     }
 
@@ -34,6 +36,39 @@ class ItemStore: ObservableObject {
         }
     }
 
+    func createQuickCaptureItem(title: String) {
+        guard !title.isEmpty else { return }
+
+        do {
+            // Get quick capture folder ID from settings
+            let quickCaptureFolderId = try? repository.getSetting(key: "quick_capture_folder_id")
+
+            var item = Item(title: title, itemType: .task)
+            item.parentId = quickCaptureFolderId
+
+            // If there's a parent folder, find the highest sort order among siblings
+            if let parentId = item.parentId {
+                let siblings = items.filter { $0.parentId == parentId }
+                let maxSortOrder = siblings.map { $0.sortOrder }.max() ?? -1
+                item.sortOrder = maxSortOrder + 1
+
+                // Auto-expand the parent folder
+                settings.expandedItemIds.insert(parentId)
+            } else {
+                // No quick capture folder set - add to root
+                let rootItems = items.filter { $0.parentId == nil }
+                let maxSortOrder = rootItems.map { $0.sortOrder }.max() ?? -1
+                item.sortOrder = maxSortOrder + 1
+            }
+
+            try repository.create(item)
+            loadItems()
+            selectedItemId = item.id
+        } catch {
+            print("Error creating quick capture item: \(error)")
+        }
+    }
+
     func updateItemTitle(id: String, title: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
 
@@ -47,8 +82,96 @@ class ItemStore: ObservableObject {
         }
     }
 
-    func createItemAfterSelected() {
-        let newItem = Item(title: "")
+    func updateItemType(id: String, itemType: ItemType) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+
+        do {
+            var item = items[index]
+            item.itemType = itemType
+            try repository.update(item)
+            items[index] = item
+        } catch {
+            print("Error updating item type: \(error)")
+        }
+    }
+
+    func toggleTaskCompletion(id: String) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+
+        do {
+            var item = items[index]
+            if item.completedAt == nil {
+                // Mark as completed
+                item.completedAt = Int(Date().timeIntervalSince1970)
+            } else {
+                // Mark as pending
+                item.completedAt = nil
+            }
+            try repository.update(item)
+            items[index] = item
+        } catch {
+            print("Error toggling task completion: \(error)")
+        }
+    }
+
+    func moveItemUp() {
+        guard let selectedId = selectedItemId,
+              let selectedItem = items.first(where: { $0.id == selectedId }) else { return }
+
+        // Get all siblings (items with same parent)
+        let siblings = items.filter { $0.parentId == selectedItem.parentId }
+            .sorted { $0.sortOrder < $1.sortOrder }
+
+        guard let currentIndex = siblings.firstIndex(where: { $0.id == selectedId }),
+              currentIndex > 0 else { return }
+
+        // Swap sort order with previous sibling
+        var itemToMove = selectedItem
+        var previousItem = siblings[currentIndex - 1]
+
+        let tempOrder = itemToMove.sortOrder
+        itemToMove.sortOrder = previousItem.sortOrder
+        previousItem.sortOrder = tempOrder
+
+        do {
+            try repository.update(itemToMove)
+            try repository.update(previousItem)
+            loadItems()
+        } catch {
+            print("Error moving item up: \(error)")
+        }
+    }
+
+    func moveItemDown() {
+        guard let selectedId = selectedItemId,
+              let selectedItem = items.first(where: { $0.id == selectedId }) else { return }
+
+        // Get all siblings (items with same parent)
+        let siblings = items.filter { $0.parentId == selectedItem.parentId }
+            .sorted { $0.sortOrder < $1.sortOrder }
+
+        guard let currentIndex = siblings.firstIndex(where: { $0.id == selectedId }),
+              currentIndex < siblings.count - 1 else { return }
+
+        // Swap sort order with next sibling
+        var itemToMove = selectedItem
+        var nextItem = siblings[currentIndex + 1]
+
+        let tempOrder = itemToMove.sortOrder
+        itemToMove.sortOrder = nextItem.sortOrder
+        nextItem.sortOrder = tempOrder
+
+        do {
+            try repository.update(itemToMove)
+            try repository.update(nextItem)
+            loadItems()
+        } catch {
+            print("Error moving item down: \(error)")
+        }
+    }
+
+    func createItemAfterSelected(withType itemType: ItemType = .unknown) {
+        let newItem = Item(title: "", itemType: itemType)
 
         // Find selected item to determine positioning
         if let selectedId = selectedItemId,
@@ -169,7 +292,7 @@ class ItemStore: ObservableObject {
         updatedItem.parentId = parent.id
 
         // Auto-expand the parent so the indented item stays visible
-        expandedItemIds.insert(parent.id)
+        settings.expandedItemIds.insert(parent.id)
 
         // Find the highest sortOrder among existing children of the new parent
         let existingChildren = items.filter { $0.parentId == parent.id }
@@ -236,6 +359,16 @@ class ItemStore: ObservableObject {
         } catch {
             print("Error outdenting item: \(error)")
         }
+    }
+
+    func expandSelectedItem() {
+        guard let selectedId = selectedItemId else { return }
+        settings.expandedItemIds.insert(selectedId)
+    }
+
+    func collapseSelectedItem() {
+        guard let selectedId = selectedItemId else { return }
+        settings.expandedItemIds.remove(selectedId)
     }
 
     func deleteSelectedItem() {

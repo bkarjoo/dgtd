@@ -162,6 +162,42 @@ class ItemRepository {
             )
         }
     }
+
+    // MARK: - App Settings
+
+    func getSetting(key: String) throws -> String? {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT value FROM app_settings WHERE key = ?",
+                arguments: [key]
+            )
+        }
+    }
+
+    func setSetting(key: String, value: String?) throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        try dbQueue.write { db in
+            if let value = value {
+                try db.execute(
+                    sql: "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)",
+                    arguments: [key, value]
+                )
+            } else {
+                try db.execute(
+                    sql: "DELETE FROM app_settings WHERE key = ?",
+                    arguments: [key]
+                )
+            }
+        }
+    }
 }
 
 // MARK: - Error Handling

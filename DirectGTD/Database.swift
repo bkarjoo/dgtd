@@ -1,12 +1,10 @@
 import Foundation
 import GRDB
 
-class Database {
+open class Database {
     static let shared = Database()
 
-    private var dbQueue: DatabaseQueue?
-
-    private init() {
+    private lazy var dbQueue: DatabaseQueue? = {
         do {
             let fileManager = FileManager.default
             let appSupportPath = try fileManager.url(
@@ -21,22 +19,20 @@ class Database {
 
             NSLog("Database: Initializing at path: \(dbPath)")
 
-            dbQueue = try DatabaseQueue(path: dbPath)
+            let queue = try DatabaseQueue(path: dbPath)
             NSLog("Database: DatabaseQueue created successfully")
-            try setupDatabase()
+            try setupDatabase(on: queue)
             NSLog("Database: Setup completed successfully")
+            return queue
         } catch {
             NSLog("Database: FATAL ERROR - \(error)")
             fatalError("Failed to initialize database: \(error)")
         }
-    }
+    }()
 
-    private func setupDatabase() throws {
-        guard let dbQueue = dbQueue else {
-            NSLog("Database: ERROR - DatabaseQueue is nil")
-            throw DatabaseError.queueNotInitialized
-        }
+    public init() {}
 
+    private func setupDatabase(on queue: DatabaseQueue) throws {
         NSLog("Database: Starting migration setup")
 
         // Create and configure the migrator
@@ -58,8 +54,49 @@ class Database {
             NSLog("Database: Migration v1 completed successfully")
         }
 
+        // Register v2 migration (add item_type column)
+        migrator.registerMigration("v2") { db in
+            NSLog("Database: Running migration v2 (add item_type column)")
+
+            // Check if column already exists (for databases created from updated schema.sql)
+            let columnExists = try db.columns(in: "items").contains { $0.name == "item_type" }
+
+            if !columnExists {
+                try db.execute(sql: """
+                    ALTER TABLE items ADD COLUMN item_type TEXT DEFAULT 'Unknown'
+                """)
+                NSLog("Database: Added item_type column")
+            } else {
+                NSLog("Database: item_type column already exists, skipping")
+            }
+
+            NSLog("Database: Migration v2 completed successfully")
+        }
+
+        // Register v3 migration (add app_settings table)
+        migrator.registerMigration("v3") { db in
+            NSLog("Database: Running migration v3 (add app_settings table)")
+
+            // Check if table already exists (for databases created from updated schema.sql)
+            let tableExists = try db.tableExists("app_settings")
+
+            if !tableExists {
+                try db.execute(sql: """
+                    CREATE TABLE app_settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT
+                    )
+                """)
+                NSLog("Database: Created app_settings table")
+            } else {
+                NSLog("Database: app_settings table already exists, skipping")
+            }
+
+            NSLog("Database: Migration v3 completed successfully")
+        }
+
         // Handle backward compatibility: Detect legacy databases and reset them
-        try dbQueue.write { db in
+        try queue.write { db in
             // State Detection Step 1: Check if grdb_migrations table exists
             let hasMigrationMetadata = try db.tableExists("grdb_migrations")
             NSLog("Database: Migration metadata exists: \(hasMigrationMetadata)")
@@ -124,11 +161,11 @@ class Database {
         // Apply all pending migrations
         NSLog("Database: Applying pending migrations...")
         do {
-            try migrator.migrate(dbQueue)
+            try migrator.migrate(queue)
             NSLog("Database: Migration system completed successfully")
 
             // Log applied migrations for debugging
-            try dbQueue.read { db in
+            try queue.read { db in
                 let appliedMigrations = try migrator.appliedIdentifiers(db)
                 NSLog("Database: Applied migrations: \(appliedMigrations.joined(separator: ", "))")
             }
@@ -144,7 +181,7 @@ class Database {
         case schemaNotFound
     }
 
-    func getQueue() -> DatabaseQueue? {
+    open func getQueue() -> DatabaseQueue? {
         return dbQueue
     }
 }
