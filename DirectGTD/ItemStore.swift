@@ -7,11 +7,15 @@ class ItemStore: ObservableObject {
     @Published var selectedItemId: String?
     @Published var editingItemId: String?
     @Published var showingQuickCapture: Bool = false
-    private let repository = ItemRepository()
+    @Published var completionDidChange: Bool = false
+    @Published var errorMessage: String?
+    private let repository: ItemRepository
     let settings: UserSettings
+    var undoManager: UndoManager?
 
-    init(settings: UserSettings) {
+    init(settings: UserSettings, repository: ItemRepository = ItemRepository()) {
         self.settings = settings
+        self.repository = repository
         NSLog("ItemStore initialized - console is working!")
     }
 
@@ -69,14 +73,22 @@ class ItemStore: ObservableObject {
         }
     }
 
-    func updateItemTitle(id: String, title: String) {
+    func updateItemTitle(id: String, title: String?) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
 
         do {
+            let oldTitle = items[index].title
             var item = items[index]
             item.title = title
+
             try repository.update(item)
             items[index] = item
+
+            // Register undo only after successful update - call self to enable redo
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.updateItemTitle(id: id, title: oldTitle)
+            }
+            undoManager?.setActionName("Edit Title")
         } catch {
             print("Error updating item: \(error)")
         }
@@ -100,6 +112,8 @@ class ItemStore: ObservableObject {
 
         do {
             var item = items[index]
+            let wasCompleted = item.completedAt != nil
+
             if item.completedAt == nil {
                 // Mark as completed
                 item.completedAt = Int(Date().timeIntervalSince1970)
@@ -107,8 +121,16 @@ class ItemStore: ObservableObject {
                 // Mark as pending
                 item.completedAt = nil
             }
+
             try repository.update(item)
             items[index] = item
+            completionDidChange.toggle()
+
+            // Register undo only after successful update
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.toggleTaskCompletion(id: id)
+            }
+            undoManager?.setActionName(wasCompleted ? "Mark Incomplete" : "Mark Complete")
         } catch {
             print("Error toggling task completion: \(error)")
         }
@@ -373,13 +395,34 @@ class ItemStore: ObservableObject {
 
     func deleteSelectedItem() {
         guard let itemId = selectedItemId else { return }
+        deleteItem(itemId: itemId)
+    }
 
+    private func deleteItem(itemId: String) {
         // Get all items in order before deletion
         let orderedItems = getAllItemsInOrder()
         guard let currentIndex = orderedItems.firstIndex(where: { $0.id == itemId }) else { return }
 
+        // Save entire subtree for undo (descendants will be cascade deleted)
+        guard let itemToDelete = items.first(where: { $0.id == itemId }) else { return }
+        let subtree = collectSubtree(itemId: itemId)
+
+        // Save tag relationships for all items in subtree - propagate errors
+        let itemIds = subtree.map { $0.id }
+        guard let itemTags = try? repository.getItemTagsForItems(itemIds: itemIds) else {
+            errorMessage = "Failed to retrieve tag relationships. Delete aborted to prevent data loss."
+            return
+        }
+
         do {
             try repository.delete(itemId: itemId)
+
+            // Register undo only after successful delete - call restore to enable redo
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.restoreSubtree(subtree: subtree, itemTags: itemTags, selectItemId: itemToDelete.id)
+            }
+            undoManager?.setActionName("Delete Item")
+
             loadItems()
 
             // Select previous item, or next item, or nil
@@ -412,5 +455,39 @@ class ItemStore: ObservableObject {
 
         collectItems(rootItems)
         return result
+    }
+
+    private func collectSubtree(itemId: String) -> [Item] {
+        var result: [Item] = []
+
+        func collectDescendants(_ id: String) {
+            guard let item = items.first(where: { $0.id == id }) else { return }
+            result.append(item)
+
+            let children = items.filter { $0.parentId == id }.sorted { $0.sortOrder < $1.sortOrder }
+            for child in children {
+                collectDescendants(child.id)
+            }
+        }
+
+        collectDescendants(itemId)
+        return result
+    }
+
+    private func restoreSubtree(subtree: [Item], itemTags: [ItemTag], selectItemId: String) {
+        do {
+            // Recreate all items and their tag relationships in a transaction
+            try repository.createItemsWithTags(items: subtree, itemTags: itemTags)
+            loadItems()
+            selectedItemId = selectItemId
+
+            // Register undo (which becomes redo) - delete the root item again
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.deleteItem(itemId: selectItemId)
+            }
+            undoManager?.setActionName("Restore Item")
+        } catch {
+            print("Error restoring subtree: \(error)")
+        }
     }
 }

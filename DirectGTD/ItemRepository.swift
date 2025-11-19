@@ -163,6 +163,38 @@ class ItemRepository {
         }
     }
 
+    // MARK: - Batch Operations
+
+    func getItemTagsForItems(itemIds: [String]) throws -> [ItemTag] {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.read { db in
+            try ItemTag
+                .filter(itemIds.contains(Column("item_id")))
+                .fetchAll(db)
+        }
+    }
+
+    func createItemsWithTags(items: [Item], itemTags: [ItemTag]) throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        try dbQueue.write { db in
+            // Create all items
+            for item in items {
+                try item.insert(db)
+            }
+
+            // Create all tag relationships
+            for itemTag in itemTags {
+                try itemTag.insert(db)
+            }
+        }
+    }
+
     // MARK: - App Settings
 
     func getSetting(key: String) throws -> String? {
