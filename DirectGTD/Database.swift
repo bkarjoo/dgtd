@@ -1,8 +1,14 @@
 import Foundation
 import GRDB
 
-open class Database {
-    static let shared = Database()
+// MARK: - DatabaseProvider Protocol
+public protocol DatabaseProvider {
+    func getQueue() -> DatabaseQueue?
+}
+
+// MARK: - Database Implementation
+open class Database: DatabaseProvider {
+    public static let shared = Database()
 
     private lazy var dbQueue: DatabaseQueue? = {
         do {

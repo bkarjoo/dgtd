@@ -2,9 +2,9 @@ import Foundation
 import GRDB
 
 class ItemRepository {
-    private let database: Database
+    private let database: DatabaseProvider
 
-    init(database: Database = .shared) {
+    init(database: DatabaseProvider = Database.shared) {
         self.database = database
     }
 

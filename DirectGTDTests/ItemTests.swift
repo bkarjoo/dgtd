@@ -12,6 +12,7 @@ final class ItemTests: XCTestCase {
         // Then
         XCTAssertFalse(item.id.isEmpty, "Item should have a non-empty ID")
         XCTAssertNil(item.title, "Title should be nil by default")
+        XCTAssertEqual(item.itemType, .unknown, "Item type should be .unknown by default")
         XCTAssertNil(item.parentId, "Parent ID should be nil by default")
         XCTAssertEqual(item.sortOrder, 0, "Sort order should be 0 by default")
         XCTAssertNil(item.completedAt, "Completed at should be nil by default")
@@ -23,6 +24,7 @@ final class ItemTests: XCTestCase {
         // Given
         let customId = "test-id-123"
         let customTitle = "Test Item"
+        let customItemType = ItemType.task
         let customParentId = "parent-123"
         let customSortOrder = 5
         let customCreatedAt = 1234567890
@@ -35,6 +37,7 @@ final class ItemTests: XCTestCase {
         let item = Item(
             id: customId,
             title: customTitle,
+            itemType: customItemType,
             parentId: customParentId,
             sortOrder: customSortOrder,
             createdAt: customCreatedAt,
@@ -47,6 +50,7 @@ final class ItemTests: XCTestCase {
         // Then
         XCTAssertEqual(item.id, customId)
         XCTAssertEqual(item.title, customTitle)
+        XCTAssertEqual(item.itemType, customItemType)
         XCTAssertEqual(item.parentId, customParentId)
         XCTAssertEqual(item.sortOrder, customSortOrder)
         XCTAssertEqual(item.createdAt, customCreatedAt)
@@ -63,6 +67,7 @@ final class ItemTests: XCTestCase {
         let item = Item(
             id: "test-id",
             title: "Test",
+            itemType: .task,
             parentId: "parent-id",
             sortOrder: 1,
             createdAt: 1000,
@@ -76,6 +81,7 @@ final class ItemTests: XCTestCase {
 
         // Then
         XCTAssertNotNil(json)
+        XCTAssertEqual(json?["item_type"] as? String, "Task", "itemType should encode as item_type")
         XCTAssertEqual(json?["parent_id"] as? String, "parent-id", "parentId should encode as parent_id")
         XCTAssertEqual(json?["sort_order"] as? Int, 1, "sortOrder should encode as sort_order")
         XCTAssertEqual(json?["created_at"] as? Int, 1000, "createdAt should encode as created_at")
@@ -88,6 +94,7 @@ final class ItemTests: XCTestCase {
         {
             "id": "test-id",
             "title": "Test Item",
+            "item_type": "Project",
             "parent_id": "parent-123",
             "sort_order": 3,
             "created_at": 1500,
@@ -106,6 +113,7 @@ final class ItemTests: XCTestCase {
         // Then
         XCTAssertEqual(item.id, "test-id")
         XCTAssertEqual(item.title, "Test Item")
+        XCTAssertEqual(item.itemType, .project)
         XCTAssertEqual(item.parentId, "parent-123")
         XCTAssertEqual(item.sortOrder, 3)
         XCTAssertEqual(item.createdAt, 1500)
@@ -120,6 +128,7 @@ final class ItemTests: XCTestCase {
         let jsonString = """
         {
             "id": "test-id",
+            "item_type": "Unknown",
             "sort_order": 0,
             "created_at": 1000,
             "modified_at": 1000
@@ -133,6 +142,7 @@ final class ItemTests: XCTestCase {
 
         // Then
         XCTAssertEqual(item.id, "test-id")
+        XCTAssertEqual(item.itemType, .unknown)
         XCTAssertNil(item.title)
         XCTAssertNil(item.parentId)
         XCTAssertNil(item.completedAt)
