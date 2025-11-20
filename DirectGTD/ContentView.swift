@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var showingAddItem = false
     @State private var newItemName = ""
     @State private var showingSettings = false
+    @Environment(\.undoManager) var undoManager
 
     init() {
         let settings = UserSettings()
@@ -36,6 +37,20 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .padding()
 
+                Button(action: { undoManager?.undo() }) {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .buttonStyle(.plain)
+                .padding()
+                .disabled(!(undoManager?.canUndo ?? false))
+
+                Button(action: { undoManager?.redo() }) {
+                    Image(systemName: "arrow.uturn.forward")
+                }
+                .buttonStyle(.plain)
+                .padding()
+                .disabled(!(undoManager?.canRedo ?? false))
+
                 Spacer()
 
                 Button(action: { showingAddItem = true }) {
@@ -45,10 +60,15 @@ struct ContentView: View {
                 .padding()
             }
 
-            // Split view: Tree on left, Detail on right
+            // Split view: Tree on left, Detail on right (or Search)
             HSplitView {
-                TreeView(store: store, settings: settings)
-                    .frame(minWidth: 200, idealWidth: 300, maxWidth: .infinity)
+                if store.isSearching {
+                    SearchResultsView(store: store)
+                        .frame(minWidth: 200, idealWidth: 300, maxWidth: .infinity)
+                } else {
+                    TreeView(store: store, settings: settings)
+                        .frame(minWidth: 200, idealWidth: 300, maxWidth: .infinity)
+                }
 
                 DetailView(store: store)
                     .frame(minWidth: 300, idealWidth: 500, maxWidth: .infinity)
@@ -65,6 +85,29 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView(settings: settings, store: store)
+        }
+        .alert("Error", isPresented: Binding(
+            get: { store.errorMessage != nil },
+            set: { if !$0 { store.errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                store.errorMessage = nil
+            }
+        } message: {
+            Text(store.errorMessage ?? "")
+        }
+        .onAppear {
+            store.undoManager = undoManager
+        }
+        .onKeyPress { keyPress in
+            if keyPress.key == KeyEquivalent("f") && keyPress.modifiers.contains(.command) {
+                store.isSearching.toggle()
+                if !store.isSearching {
+                    store.searchText = ""
+                }
+                return .handled
+            }
+            return .ignored
         }
     }
 

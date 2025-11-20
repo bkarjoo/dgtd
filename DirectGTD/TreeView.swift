@@ -26,7 +26,7 @@ struct TreeView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: settings.lineSpacing) {
                             ForEach(rootItems, id: \.id) { item in
-                                ItemRow(item: item, allItems: store.items, store: store, settings: settings, editFieldFocused: $editFieldFocused, fontSize: settings.fontSize)
+                                ItemRow(item: item, allItems: store.items, store: store, settings: settings, editFieldFocused: $editFieldFocused, fontSize: settings.fontSize, onCompletionToggled: { updateSelectionIfInvalid() })
                                     .id(item.id)
                             }
                         }
@@ -38,6 +38,13 @@ struct TreeView: View {
                 .onTapGesture {
                     DispatchQueue.main.async {
                         isFocused = true
+                    }
+                }
+                .onChange(of: store.selectedItemId) { oldValue, newValue in
+                    if let itemId = newValue {
+                        DispatchQueue.main.async {
+                            proxy.scrollTo(itemId, anchor: .center)
+                        }
                     }
                 }
                 .onChange(of: store.editingItemId) { oldValue, newValue in
@@ -188,6 +195,16 @@ struct TreeView: View {
                     store.showingQuickCapture = true
                 }
                 return .handled
+            case KeyEquivalent("."):
+                DispatchQueue.main.async {
+                    if let selectedId = store.selectedItemId,
+                       let item = store.items.first(where: { $0.id == selectedId }),
+                       item.itemType == .task {
+                        store.toggleTaskCompletion(id: selectedId)
+                        updateSelectionIfInvalid()
+                    }
+                }
+                return .handled
             default:
                 NSLog("unhandled key: \(String(describing: keyPress.key)) modifiers=\(keyPress.modifiers)")
                 return .ignored
@@ -195,6 +212,16 @@ struct TreeView: View {
         }
         .onChange(of: isFocused) { oldValue, newValue in
             NSLog("TreeView focus changed: \(oldValue) -> \(newValue)")
+        }
+        .onChange(of: settings.showCompletedTasks) { oldValue, newValue in
+            DispatchQueue.main.async {
+                updateSelectionIfInvalid()
+            }
+        }
+        .onChange(of: store.completionDidChange) { oldValue, newValue in
+            DispatchQueue.main.async {
+                updateSelectionIfInvalid()
+            }
         }
         .onAppear {
             DispatchQueue.main.async {
@@ -281,6 +308,73 @@ struct TreeView: View {
         }
         store.selectedItemId = visibleItems[currentIndex - 1].id
     }
+
+    private func updateSelectionIfInvalid() {
+        guard let currentId = store.selectedItemId else {
+            // No selection, select first visible item if any
+            store.selectedItemId = visibleItems.first?.id
+            return
+        }
+
+        // Check if current selection is still visible
+        if visibleItems.contains(where: { $0.id == currentId }) {
+            return // Still valid
+        }
+
+        guard let currentItem = store.items.first(where: { $0.id == currentId }) else {
+            // Item deleted, select first visible
+            store.selectedItemId = visibleItems.first?.id
+            return
+        }
+
+        // 1. Try previous sibling with status not complete
+        let siblings = store.items
+            .filter { $0.parentId == currentItem.parentId }
+            .sorted { $0.sortOrder < $1.sortOrder }
+
+        if let currentIndex = siblings.firstIndex(where: { $0.id == currentId }) {
+            // Look backwards for visible sibling
+            for i in stride(from: currentIndex - 1, through: 0, by: -1) {
+                let sibling = siblings[i]
+                if shouldShowItem(sibling) {
+                    store.selectedItemId = sibling.id
+                    return
+                }
+            }
+
+            // 2. Try next sibling with status not complete
+            for i in (currentIndex + 1)..<siblings.count {
+                let sibling = siblings[i]
+                if shouldShowItem(sibling) {
+                    store.selectedItemId = sibling.id
+                    return
+                }
+            }
+        }
+
+        // 3. Walk up parents until finding one that should be shown
+        var parentId = currentItem.parentId
+        while let pid = parentId {
+            if let parent = store.items.first(where: { $0.id == pid }) {
+                if shouldShowItem(parent) {
+                    store.selectedItemId = parent.id
+                    return
+                }
+                // Parent is hidden (completed task), go to its parent
+                parentId = parent.parentId
+            } else {
+                break
+            }
+        }
+
+        // 4. No valid relative found, select first visible item in tree
+        if let firstVisible = visibleItems.first {
+            store.selectedItemId = firstVisible.id
+        } else {
+            // 5. No visible items at all
+            store.selectedItemId = nil
+        }
+    }
 }
 
 struct ItemRow: View {
@@ -290,6 +384,7 @@ struct ItemRow: View {
     @ObservedObject var settings: UserSettings
     @FocusState.Binding var editFieldFocused: Bool
     let fontSize: CGFloat
+    let onCompletionToggled: () -> Void
     @State private var editText: String = ""
 
     private var isExpanded: Binding<Bool> {
@@ -348,6 +443,7 @@ struct ItemRow: View {
                             .onTapGesture {
                                 DispatchQueue.main.async {
                                     store.toggleTaskCompletion(id: item.id)
+                                    onCompletionToggled()
                                 }
                             }
                     } else {
@@ -380,7 +476,7 @@ struct ItemRow: View {
             // Children (if expanded)
             if !children.isEmpty && isExpanded.wrappedValue {
                 ForEach(children, id: \.id) { child in
-                    ItemRow(item: child, allItems: allItems, store: store, settings: settings, editFieldFocused: $editFieldFocused, fontSize: fontSize)
+                    ItemRow(item: child, allItems: allItems, store: store, settings: settings, editFieldFocused: $editFieldFocused, fontSize: fontSize, onCompletionToggled: onCompletionToggled)
                         .id(child.id)
                         .padding(.leading, 20)
                 }

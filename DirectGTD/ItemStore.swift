@@ -9,9 +9,12 @@ class ItemStore: ObservableObject {
     @Published var showingQuickCapture: Bool = false
     @Published var completionDidChange: Bool = false
     @Published var errorMessage: String?
+    @Published var searchText: String = ""
+    @Published var isSearching: Bool = false
     private let repository: ItemRepository
     let settings: UserSettings
     var undoManager: UndoManager?
+    private var pendingCreatedItemIds: Set<String> = []
 
     init(settings: UserSettings, repository: ItemRepository = ItemRepository()) {
         self.settings = settings
@@ -33,6 +36,7 @@ class ItemStore: ObservableObject {
         do {
             let item = Item(title: title)
             try repository.create(item)
+            registerCreationUndo(for: item.id)
             loadItems()
             selectedItemId = item.id
         } catch {
@@ -66,6 +70,7 @@ class ItemStore: ObservableObject {
             }
 
             try repository.create(item)
+            registerCreationUndo(for: item.id)
             loadItems()
             selectedItemId = item.id
         } catch {
@@ -84,11 +89,17 @@ class ItemStore: ObservableObject {
             try repository.update(item)
             items[index] = item
 
-            // Register undo only after successful update - call self to enable redo
-            undoManager?.registerUndo(withTarget: self) { store in
-                store.updateItemTitle(id: id, title: oldTitle)
+            // Register undo only after successful update
+            if pendingCreatedItemIds.contains(id) {
+                // Creation already has an undo entry that deletes the item.
+                pendingCreatedItemIds.remove(id)
+            } else {
+                // Normal title edit - undo should revert title (enables redo)
+                undoManager?.registerUndo(withTarget: self) { store in
+                    store.updateItemTitle(id: id, title: oldTitle)
+                }
+                undoManager?.setActionName("Edit Title")
             }
-            undoManager?.setActionName("Edit Title")
         } catch {
             print("Error updating item: \(error)")
         }
@@ -213,6 +224,7 @@ class ItemStore: ObservableObject {
 
             do {
                 try repository.create(itemToCreate)
+                registerCreationUndo(for: itemToCreate.id, coalesceWithFirstTitleEdit: true)
                 loadItems()
                 selectedItemId = itemToCreate.id
                 editingItemId = itemToCreate.id
@@ -233,6 +245,7 @@ class ItemStore: ObservableObject {
 
             do {
                 try repository.create(itemToCreate)
+                registerCreationUndo(for: itemToCreate.id, coalesceWithFirstTitleEdit: true)
                 loadItems()
                 selectedItemId = itemToCreate.id
                 editingItemId = itemToCreate.id
@@ -256,6 +269,7 @@ class ItemStore: ObservableObject {
             }
 
             do {
+                pendingCreatedItemIds.remove(editId)
                 try repository.delete(itemId: editId)
                 loadItems()
 
@@ -398,7 +412,18 @@ class ItemStore: ObservableObject {
         deleteItem(itemId: itemId)
     }
 
+    private func registerCreationUndo(for itemId: String, coalesceWithFirstTitleEdit: Bool = false) {
+        if coalesceWithFirstTitleEdit {
+            pendingCreatedItemIds.insert(itemId)
+        }
+        undoManager?.registerUndo(withTarget: self) { store in
+            store.deleteItem(itemId: itemId)
+        }
+        undoManager?.setActionName("Create Item")
+    }
+
     private func deleteItem(itemId: String) {
+        pendingCreatedItemIds.remove(itemId)
         // Get all items in order before deletion
         let orderedItems = getAllItemsInOrder()
         guard let currentIndex = orderedItems.firstIndex(where: { $0.id == itemId }) else { return }
@@ -476,6 +501,7 @@ class ItemStore: ObservableObject {
 
     private func restoreSubtree(subtree: [Item], itemTags: [ItemTag], selectItemId: String) {
         do {
+            pendingCreatedItemIds.subtract(subtree.map { $0.id })
             // Recreate all items and their tag relationships in a transaction
             try repository.createItemsWithTags(items: subtree, itemTags: itemTags)
             loadItems()
@@ -489,5 +515,32 @@ class ItemStore: ObservableObject {
         } catch {
             print("Error restoring subtree: \(error)")
         }
+    }
+
+    // MARK: - Search
+
+    var searchResults: [Item] {
+        guard !searchText.isEmpty else { return [] }
+        return items.filter { item in
+            item.title?.localizedCaseInsensitiveContains(searchText) ?? false
+        }
+    }
+
+    func getItemPath(itemId: String) -> String {
+        var path: [String] = []
+        var currentId: String? = itemId
+
+        while let id = currentId {
+            if let item = items.first(where: { $0.id == id }) {
+                if let title = item.title, !title.isEmpty {
+                    path.insert(title, at: 0)
+                }
+                currentId = item.parentId
+            } else {
+                break
+            }
+        }
+
+        return path.joined(separator: " > ")
     }
 }
