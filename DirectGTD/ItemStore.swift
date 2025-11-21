@@ -11,6 +11,9 @@ class ItemStore: ObservableObject {
     @Published var errorMessage: String?
     @Published var searchText: String = ""
     @Published var isSearching: Bool = false
+    @Published private(set) var tags: [Tag] = []
+    @Published private(set) var itemTags: [String: [Tag]] = [:] // Cache: itemId -> tags
+    @Published var filteredByTag: Tag? = nil
     private let repository: ItemRepository
     let settings: UserSettings
     var undoManager: UndoManager?
@@ -25,8 +28,31 @@ class ItemStore: ObservableObject {
     func loadItems() {
         do {
             items = try repository.getAllItems()
+            loadTags()
         } catch {
             print("Error loading items: \(error)")
+        }
+    }
+
+    func loadTags() {
+        do {
+            // Load all tags
+            tags = try repository.getAllTags()
+
+            // Populate itemTags cache using existing repository method
+            let itemIds = items.map { $0.id }
+            let allItemTags = try repository.getItemTagsForItems(itemIds: itemIds)
+
+            // Build cache: itemId -> [Tag]
+            var cache: [String: [Tag]] = [:]
+            for itemTag in allItemTags {
+                if let tag = tags.first(where: { $0.id == itemTag.tagId }) {
+                    cache[itemTag.itemId, default: []].append(tag)
+                }
+            }
+            itemTags = cache
+        } catch {
+            print("Error loading tags: \(error)")
         }
     }
 
@@ -514,6 +540,125 @@ class ItemStore: ObservableObject {
             undoManager?.setActionName("Restore Item")
         } catch {
             print("Error restoring subtree: \(error)")
+        }
+    }
+
+    // MARK: - Tag Management
+
+    func getTagsForItem(itemId: String) -> [Tag] {
+        return itemTags[itemId] ?? []
+    }
+
+    func createTag(name: String, color: String) -> Tag? {
+        guard !name.isEmpty else { return nil }
+
+        let tag = Tag(name: name, color: color)
+        do {
+            try repository.createTag(tag)
+            loadTags()
+
+            // Register undo
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.deleteTag(tagId: tag.id)
+            }
+            undoManager?.setActionName("Create Tag")
+
+            return tag
+        } catch {
+            print("Error creating tag: \(error)")
+            return nil
+        }
+    }
+
+    func updateTag(tag: Tag) {
+        do {
+            let oldTag = tags.first(where: { $0.id == tag.id })
+            try repository.updateTag(tag)
+            loadTags()
+
+            // Register undo
+            if let old = oldTag {
+                undoManager?.registerUndo(withTarget: self) { store in
+                    store.updateTag(tag: old)
+                }
+                undoManager?.setActionName("Edit Tag")
+            }
+        } catch {
+            print("Error updating tag: \(error)")
+        }
+    }
+
+    func deleteTag(tagId: String) {
+        guard let tag = tags.first(where: { $0.id == tagId }) else { return }
+
+        do {
+            // Get all items that use this tag for undo
+            let affectedItemIds = itemTags.filter { $0.value.contains(where: { $0.id == tagId }) }.keys.map { $0 }
+
+            try repository.deleteTag(tagId: tagId)
+            loadTags()
+
+            // Register undo - preserve original tag with same ID
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.restoreTag(tag: tag, itemIds: affectedItemIds)
+            }
+            undoManager?.setActionName("Delete Tag")
+        } catch {
+            print("Error deleting tag: \(error)")
+        }
+    }
+
+    private func restoreTag(tag: Tag, itemIds: [String]) {
+        do {
+            // Recreate tag with original ID (no undo recording)
+            try repository.createTag(tag)
+
+            // Re-associate with items (no undo recording)
+            for itemId in itemIds {
+                try repository.addTagToItem(itemId: itemId, tagId: tag.id)
+            }
+
+            loadTags()
+
+            // Register undo (which becomes redo) - delete the tag again
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.deleteTag(tagId: tag.id)
+            }
+            undoManager?.setActionName("Restore Tag")
+        } catch {
+            print("Error restoring tag: \(error)")
+        }
+    }
+
+    func addTagToItem(itemId: String, tag: Tag) {
+        do {
+            try repository.addTagToItem(itemId: itemId, tagId: tag.id)
+            loadTags()
+
+            // Register undo
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.removeTagFromItem(itemId: itemId, tagId: tag.id)
+            }
+            undoManager?.setActionName("Add Tag")
+        } catch {
+            print("Error adding tag to item: \(error)")
+        }
+    }
+
+    func removeTagFromItem(itemId: String, tagId: String) {
+        guard let tag = tags.first(where: { $0.id == tagId }) else { return }
+
+        do {
+            try repository.removeTagFromItem(itemId: itemId, tagId: tagId)
+            loadTags()
+
+            // Register undo
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.addTagToItem(itemId: itemId, tag: tag)
+            }
+            undoManager?.setActionName("Remove Tag")
+        } catch {
+            print("Error removing tag from item: \(error)")
         }
     }
 

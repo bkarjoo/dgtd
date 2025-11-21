@@ -47,6 +47,16 @@ struct TreeView: View {
                         }
                     }
                 }
+                .onChange(of: store.isSearching) { oldValue, newValue in
+                    // When returning from search, scroll to selected item
+                    if oldValue == true && newValue == false {
+                        if let itemId = store.selectedItemId {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                proxy.scrollTo(itemId, anchor: .center)
+                            }
+                        }
+                    }
+                }
                 .onChange(of: store.editingItemId) { oldValue, newValue in
                     if let itemId = newValue {
                         DispatchQueue.main.async {
@@ -456,6 +466,22 @@ struct ItemRow: View {
 
                     Spacer()
 
+                    // Tag count badge
+                    if tagCount > 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "tag.fill")
+                                .font(.system(size: fontSize * 0.7))
+                            Text("\(tagCount)")
+                                .font(.system(size: fontSize * 0.8))
+                        }
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.1))
+                        .cornerRadius(4)
+                    }
+
+                    // Children count
                     if !children.isEmpty {
                         Text("\(children.count)")
                             .font(.system(size: fontSize * 0.9))
@@ -503,6 +529,10 @@ struct ItemRow: View {
                 return true
             }
             .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    private var tagCount: Int {
+        store.getTagsForItem(itemId: item.id).count
     }
 
     private func commitEdit() {

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DetailView: View {
     @ObservedObject var store: ItemStore
+    @State private var showingTagPicker: Bool = false
 
     var body: some View {
         VStack {
@@ -27,6 +28,27 @@ struct DetailView: View {
                         .pickerStyle(.menu)
                     }
 
+                    Section("Tags") {
+                        FlowLayout(spacing: 8) {
+                            ForEach(store.getTagsForItem(itemId: selectedId)) { tag in
+                                TagChip(tag: tag, showRemove: true) {
+                                    store.removeTagFromItem(itemId: selectedId, tagId: tag.id)
+                                }
+                            }
+
+                            Button(action: { showingTagPicker = true }) {
+                                Label("Add Tag", systemImage: "plus")
+                                    .font(.system(size: 12))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color(NSColor.controlBackgroundColor))
+                            .cornerRadius(4)
+                        }
+                        .frame(minHeight: 32)
+                    }
+
                     if selectedItem.itemType == .task {
                         Section {
                             Toggle("Completed", isOn: Binding(
@@ -37,9 +59,25 @@ struct DetailView: View {
                             ))
                         }
                     }
+
+                    Section("Debug (Temporary)") {
+                        HStack {
+                            Text("Item ID:")
+                            Spacer()
+                            Text(selectedId)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
                 .formStyle(.grouped)
                 .padding()
+                .sheet(isPresented: $showingTagPicker) {
+                    if let selectedId = store.selectedItemId {
+                        TagPickerView(store: store, itemId: selectedId)
+                    }
+                }
                 Spacer()
             } else {
                 Text("No item selected")

@@ -127,6 +127,11 @@ struct Tag: Codable, FetchableRecord, PersistableRecord {
     }
 }
 
+// MARK: - Tag Identifiable Conformance
+extension Tag: Identifiable {
+    // Tag already has 'id' property, just need to declare conformance
+}
+
 // MARK: - ItemTag Model (junction table)
 struct ItemTag: Codable, FetchableRecord, PersistableRecord {
     var itemId: String

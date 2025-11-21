@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject var store: ItemStore
     @Environment(\.dismiss) var dismiss
     @State private var quickCaptureFolderId: String?
+    @State private var showingTagManager: Bool = false
 
     var body: some View {
         Form {
@@ -17,6 +18,34 @@ struct SettingsView: View {
                 }
                 .onChange(of: quickCaptureFolderId) { oldValue, newValue in
                     saveQuickCaptureFolder(newValue)
+                }
+            }
+
+            Section("Tags") {
+                Button(action: { showingTagManager = true }) {
+                    HStack {
+                        Text("Manage Tags")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+
+            Section("Debug (Temporary)") {
+                HStack {
+                    Text("Selected Item ID:")
+                    Spacer()
+                    if let selectedId = store.selectedItemId {
+                        Text(selectedId)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                    } else {
+                        Text("None")
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
 
@@ -53,6 +82,9 @@ struct SettingsView: View {
         }
         .onAppear {
             loadQuickCaptureFolder()
+        }
+        .sheet(isPresented: $showingTagManager) {
+            TagManagerView(store: store)
         }
     }
 
