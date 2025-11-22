@@ -247,11 +247,22 @@ Tags let you categorize items across the hierarchy - perfect for GTD contexts (h
 - **Search tags** by name for quick access
 - **Multiple tags** per item (unlimited)
 
-**Managing Tags:**
+**Tag Manager (Centralized Management):**
+
+Access via **Settings (⚙️) → Manage Tags**
+
+- **View all tags** - Alphabetically sorted list
+- **Usage count** - See how many items use each tag
+- **Edit tags** - Click pencil icon to change name/color
+- **Delete tags** - Click trash icon (warns if tag is in use)
+- **Create tags** - "New Tag" button at bottom
+- **Undo/Redo** - Cmd+Z/Cmd+Shift+Z work in Tag Manager
+
+**Individual Tag Management:**
 - Tags are **reusable** - create once, use everywhere
 - **Color-coded** for visual scanning
-- **Remove tag** - Click X on tag chip in DetailView
-- **Undo support** - Tag operations are undoable
+- **Remove from item** - Click X on tag chip in DetailView
+- **Undo support** - All tag operations are undoable
 
 **Visual Design:**
 - **Colored chips** with custom colors
@@ -270,6 +281,8 @@ Tags let you categorize items across the hierarchy - perfect for GTD contexts (h
 *[Screenshot: DetailView with multiple colored tags]*
 
 *[Screenshot: Tag picker with search and checkboxes]*
+
+*[Screenshot: Tag Manager showing list with usage counts and edit/delete buttons]*
 
 ---
 
@@ -335,7 +348,12 @@ Click the **gear icon (⚙️)** in the toolbar to access settings:
 
 **Behavior Settings:**
 - **Quick Capture Folder** - Choose where "I" sends tasks
-- (More settings coming)
+- **Manage Tags** - Opens Tag Manager for centralized tag management
+
+**Tag Management:**
+- View all tags with usage counts
+- Edit/delete tags
+- Create new tags
 
 All settings **persist across sessions**.
 
