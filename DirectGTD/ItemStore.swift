@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import GRDB
 
 class ItemStore: ObservableObject {
     @Published private(set) var items: [Item] = []
@@ -18,6 +19,7 @@ class ItemStore: ObservableObject {
     let settings: UserSettings
     var undoManager: UndoManager?
     private var pendingCreatedItemIds: Set<String> = []
+    private var databaseObserver: DatabaseCancellable?
 
     init(settings: UserSettings, repository: ItemRepository = ItemRepository()) {
         self.settings = settings
@@ -29,6 +31,11 @@ class ItemStore: ObservableObject {
         do {
             items = try repository.getAllItems()
             loadTags()
+
+            // Start observation after first successful load
+            if databaseObserver == nil {
+                startDatabaseObservation()
+            }
         } catch {
             print("Error loading items: \(error)")
         }
@@ -53,6 +60,18 @@ class ItemStore: ObservableObject {
             itemTags = cache
         } catch {
             print("Error loading tags: \(error)")
+        }
+    }
+
+    private func startDatabaseObservation() {
+        do {
+            databaseObserver = try repository.observeDatabaseChanges { [weak self] in
+                // Reload data when database changes (e.g., from MCP functions)
+                // Main queue dispatch already handled in repository
+                self?.loadItems()
+            }
+        } catch {
+            print("Error starting database observation: \(error)")
         }
     }
 

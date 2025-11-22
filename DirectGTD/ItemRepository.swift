@@ -230,6 +230,37 @@ class ItemRepository {
             }
         }
     }
+
+    // MARK: - Database Observation
+
+    func observeDatabaseChanges(
+        onChange: @escaping () -> Void
+    ) throws -> DatabaseCancellable {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        let observation = ValueObservation.trackingConstantRegion { db -> (Int, Int, Int) in
+            let itemCount = try Item.fetchCount(db)
+            let tagCount = try Tag.fetchCount(db)
+            let itemTagCount = try ItemTag.fetchCount(db)
+            return (itemCount, tagCount, itemTagCount)
+        }
+
+        return observation.start(
+            in: dbQueue,
+            scheduling: .immediate,
+            onError: { error in
+                print("Database observation error: \(error)")
+            },
+            onChange: { _ in
+                // Schedule callback on main queue
+                DispatchQueue.main.async {
+                    onChange()
+                }
+            }
+        )
+    }
 }
 
 // MARK: - Error Handling
