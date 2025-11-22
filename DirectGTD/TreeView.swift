@@ -415,10 +415,37 @@ struct ItemRow: View {
                 if newValue {
                     settings.expandedItemIds.insert(item.id)
                 } else {
+                    // Collapsing: check if any descendant is selected
+                    if hasSelectedDescendant(item: item) {
+                        store.selectedItemId = item.id
+                    }
                     settings.expandedItemIds.remove(item.id)
                 }
             }
         )
+    }
+
+    private func hasSelectedDescendant(item: Item) -> Bool {
+        guard let selectedId = store.selectedItemId else { return false }
+        return isDescendant(of: item, itemId: selectedId, in: allItems)
+    }
+
+    private func isDescendant(of parent: Item, itemId: String, in items: [Item]) -> Bool {
+        if itemId == parent.id { return false }
+
+        guard let item = items.first(where: { $0.id == itemId }) else { return false }
+
+        var current = item
+        while let parentId = current.parentId {
+            if parentId == parent.id {
+                return true
+            }
+            guard let parentItem = items.first(where: { $0.id == parentId }) else {
+                break
+            }
+            current = parentItem
+        }
+        return false
     }
 
     var body: some View {
