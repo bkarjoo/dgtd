@@ -247,6 +247,19 @@ Tags let you categorize items across the hierarchy - perfect for GTD contexts (h
 - **Search tags** by name for quick access
 - **Multiple tags** per item (unlimited)
 
+**Tag Filtering:**
+
+**Filter your tree view by tag to focus on specific contexts.**
+
+- **Tag filter button** in toolbar (tag icon)
+- Click to open tag filter picker
+- **Select a tag** to show only items with that tag
+- **Smart filtering** - Also shows parent items (preserves hierarchy)
+- **Clear button** appears when filter is active
+- **Visual indicator** - Tag icon becomes filled/accented when filtering
+
+**Perfect for GTD contexts**: Filter by "home" to see only home tasks, "work" for work items, etc.
+
 **Tag Manager (Centralized Management):**
 
 Access via **Settings (⚙️) → Manage Tags**
@@ -283,6 +296,8 @@ Access via **Settings (⚙️) → Manage Tags**
 *[Screenshot: Tag picker with search and checkboxes]*
 
 *[Screenshot: Tag Manager showing list with usage counts and edit/delete buttons]*
+
+*[Screenshot: Tag filter active - toolbar icon highlighted and filtered tree view]*
 
 ---
 
@@ -378,6 +393,7 @@ All settings **persist across sessions**.
 **Quick Workflows:**
 - Use **I** for rapid task capture without leaving context
 - Use **Cmd+F** to find anything instantly (scales to 1000+ items)
+- **Filter by tag** - Click tag icon to see only items in a specific context (home, work, etc.)
 - **Tags for contexts** - Tag tasks with contexts (home, work, computer) for GTD workflow
 - **Quick capture folder** keeps your inbox organized
 - Hide completed tasks (eye icon) for focused work sessions
@@ -450,8 +466,8 @@ A: Semantics. Use whatever mental model works for you. They behave identically.
 **Q: How do I find an item quickly?**
 A: Cmd+F opens search. Type a few letters and click the result. Works with hundreds of items.
 
-**Q: Can I filter by tag?**
-A: Not yet in this version, but tag filtering is coming soon. For now, use tags for visual organization and context.
+**Q: How do I filter by tag?**
+A: Click the tag icon in the toolbar, select a tag, and the tree view shows only items with that tag (plus their parents to preserve hierarchy). Click "Clear" to remove the filter.
 
 **Q: How do I check off tasks with keyboard?**
 A: Press period (.) when a task is selected. No mouse needed!
@@ -531,6 +547,10 @@ Questions? Found a bug? Want to contribute?
 - **Create custom tags** with name and color picker
 - **Unlimited tags per item** - Assign multiple tags
 - **Tag picker** with search and checkboxes
+- **Tag filtering** - Click toolbar icon to filter by tag
+- **Smart filtering** - Shows items with tag plus their parents
+- **Visual indicator** - Filled tag icon when filter is active
+- **Tag Manager** - Centralized tag management in Settings
 - **Colored tag chips** in DetailView
 - **Reusable tags** - Create once, use everywhere
 - **GTD-ready** - Perfect for contexts (home, work, computer)
