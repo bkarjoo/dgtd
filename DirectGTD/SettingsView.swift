@@ -8,8 +8,22 @@ struct SettingsView: View {
     @State private var showingTagManager: Bool = false
 
     var body: some View {
-        Form {
-            Section("Quick Capture") {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Settings")
+                    .font(.headline)
+                Spacer()
+                Button("Done") {
+                    dismiss()
+                }
+            }
+            .padding()
+
+            Divider()
+
+            Form {
+                Section("Quick Capture") {
                 Picker("Quick Capture Folder", selection: $quickCaptureFolderId) {
                     Text("None").tag(String?.none)
                     ForEach(folderItems, id: \.id) { folder in
@@ -30,6 +44,7 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -70,16 +85,10 @@ struct SettingsView: View {
                     Slider(value: $settings.lineSpacing, in: 0...16, step: 1)
                 }
             }
-        }
-        .formStyle(.grouped)
-        .frame(width: 400, height: 400)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("Done") {
-                    dismiss()
-                }
             }
+            .formStyle(.grouped)
         }
+        .frame(width: 400, height: 400)
         .onAppear {
             loadQuickCaptureFolder()
         }

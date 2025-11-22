@@ -67,6 +67,17 @@ struct TagManagerView: View {
             .padding()
         }
         .frame(width: 400, height: 500)
+        .onKeyPress { keyPress in
+            if keyPress.key == KeyEquivalent("z") && keyPress.modifiers.contains(.command) {
+                if keyPress.modifiers.contains(.shift) {
+                    store.undoManager?.redo()
+                } else {
+                    store.undoManager?.undo()
+                }
+                return .handled
+            }
+            return .ignored
+        }
         .sheet(isPresented: $showingTagEditor) {
             if let tag = tagToEdit {
                 // Edit existing tag
