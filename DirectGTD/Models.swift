@@ -127,9 +127,10 @@ struct Tag: Codable, FetchableRecord, PersistableRecord {
     }
 }
 
-// MARK: - Tag Identifiable Conformance
-extension Tag: Identifiable {
+// MARK: - Tag Identifiable & Equatable Conformance
+extension Tag: Identifiable, Equatable {
     // Tag already has 'id' property, just need to declare conformance
+    // Equatable conformance is synthesized automatically since all properties are Equatable
 }
 
 // MARK: - ItemTag Model (junction table)

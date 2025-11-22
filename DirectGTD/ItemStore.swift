@@ -549,6 +549,36 @@ class ItemStore: ObservableObject {
         return itemTags[itemId] ?? []
     }
 
+    func matchesTagFilter(_ item: Item) -> Bool {
+        guard let filterTag = filteredByTag else {
+            return true // No filter active
+        }
+
+        // Check if this item has the filter tag
+        let itemHasTag = getTagsForItem(itemId: item.id).contains { $0.id == filterTag.id }
+        if itemHasTag {
+            return true
+        }
+
+        // Check if any descendant has the filter tag (show parents of matching items)
+        if hasDescendantWithTag(item, tagId: filterTag.id, allItems: items) {
+            return true
+        }
+
+        return false
+    }
+
+    func hasDescendantWithTag(_ item: Item, tagId: String, allItems: [Item]) -> Bool {
+        let children = allItems.filter { $0.parentId == item.id }
+        for child in children {
+            let childHasTag = getTagsForItem(itemId: child.id).contains { $0.id == tagId }
+            if childHasTag || hasDescendantWithTag(child, tagId: tagId, allItems: allItems) {
+                return true
+            }
+        }
+        return false
+    }
+
     func createTag(name: String, color: String) -> Tag? {
         guard !name.isEmpty else { return nil }
 
@@ -595,12 +625,18 @@ class ItemStore: ObservableObject {
             // Get all items that use this tag for undo
             let affectedItemIds = itemTags.filter { $0.value.contains(where: { $0.id == tagId }) }.keys.map { $0 }
 
+            // Clear filter if deleting the active filter tag
+            let wasFilteredByThisTag = filteredByTag?.id == tagId
+            if wasFilteredByThisTag {
+                filteredByTag = nil
+            }
+
             try repository.deleteTag(tagId: tagId)
             loadTags()
 
-            // Register undo - preserve original tag with same ID
+            // Register undo - preserve original tag with same ID and restore filter if needed
             undoManager?.registerUndo(withTarget: self) { store in
-                store.restoreTag(tag: tag, itemIds: affectedItemIds)
+                store.restoreTag(tag: tag, itemIds: affectedItemIds, restoreAsFilter: wasFilteredByThisTag)
             }
             undoManager?.setActionName("Delete Tag")
         } catch {
@@ -608,7 +644,7 @@ class ItemStore: ObservableObject {
         }
     }
 
-    private func restoreTag(tag: Tag, itemIds: [String]) {
+    private func restoreTag(tag: Tag, itemIds: [String], restoreAsFilter: Bool = false) {
         do {
             // Recreate tag with original ID (no undo recording)
             try repository.createTag(tag)
@@ -619,6 +655,11 @@ class ItemStore: ObservableObject {
             }
 
             loadTags()
+
+            // Restore as filter if it was the active filter when deleted
+            if restoreAsFilter {
+                filteredByTag = tag
+            }
 
             // Register undo (which becomes redo) - delete the tag again
             undoManager?.registerUndo(withTarget: self) { store in

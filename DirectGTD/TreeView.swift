@@ -233,6 +233,11 @@ struct TreeView: View {
                 updateSelectionIfInvalid()
             }
         }
+        .onChange(of: store.filteredByTag) { oldValue, newValue in
+            DispatchQueue.main.async {
+                updateSelectionIfInvalid()
+            }
+        }
         .onAppear {
             DispatchQueue.main.async {
                 store.loadItems()
@@ -267,10 +272,16 @@ struct TreeView: View {
     }
 
     private func shouldShowItem(_ item: Item) -> Bool {
+        // Filter by tag if active (takes precedence over completed check)
+        if store.filteredByTag != nil {
+            return store.matchesTagFilter(item)
+        }
+
         // Hide completed tasks if showCompletedTasks is false
         if !settings.showCompletedTasks && item.itemType == .task && item.completedAt != nil {
             return false
         }
+
         return true
     }
 
@@ -521,11 +532,17 @@ struct ItemRow: View {
     private var children: [Item] {
         allItems
             .filter { $0.parentId == item.id }
-            .filter { item in
+            .filter { child in
+                // Filter by tag if active (takes precedence over completed check)
+                if store.filteredByTag != nil {
+                    return store.matchesTagFilter(child)
+                }
+
                 // Hide completed tasks if showCompletedTasks is false
-                if !settings.showCompletedTasks && item.itemType == .task && item.completedAt != nil {
+                if !settings.showCompletedTasks && child.itemType == .task && child.completedAt != nil {
                     return false
                 }
+
                 return true
             }
             .sorted { $0.sortOrder < $1.sortOrder }

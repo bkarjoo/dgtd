@@ -121,8 +121,9 @@ struct SearchResultRow: View {
         // Expand all ancestors so the item is visible
         expandAncestors()
 
-        // If selecting a completed task while "hide completed" is off, turn it on
-        if isCompleted && !store.settings.showCompletedTasks {
+        // If any ancestor or the item itself is completed while "hide completed" is off, turn it on
+        // This ensures the entire chain is visible
+        if hasCompletedAncestor() && !store.settings.showCompletedTasks {
             store.settings.showCompletedTasks = true
         }
 
@@ -144,6 +145,28 @@ struct SearchResultRow: View {
                 break
             }
         }
+    }
+
+    private func hasCompletedAncestor() -> Bool {
+        // Check if the item itself is completed
+        if isCompleted {
+            return true
+        }
+
+        // Check all ancestors
+        var currentId: String? = item.parentId
+        while let parentId = currentId {
+            if let parent = store.items.first(where: { $0.id == parentId }) {
+                if parent.itemType == .task && parent.completedAt != nil {
+                    return true
+                }
+                currentId = parent.parentId
+            } else {
+                break
+            }
+        }
+
+        return false
     }
 }
 

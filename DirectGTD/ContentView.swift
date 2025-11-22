@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var showingAddItem = false
     @State private var newItemName = ""
     @State private var showingSettings = false
+    @State private var showingTagFilter = false
     @Environment(\.undoManager) var undoManager
 
     init() {
@@ -36,6 +37,16 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .padding()
+
+                Button(action: { showingTagFilter = true }) {
+                    Image(systemName: store.filteredByTag != nil ? "tag.fill" : "tag")
+                        .foregroundColor(store.filteredByTag != nil ? .accentColor : .primary)
+                }
+                .buttonStyle(.plain)
+                .padding()
+                .popover(isPresented: $showingTagFilter, arrowEdge: .bottom) {
+                    TagFilterPickerView(store: store, onDismiss: { showingTagFilter = false })
+                }
 
                 Button(action: { undoManager?.undo() }) {
                     Image(systemName: "arrow.uturn.backward")

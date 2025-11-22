@@ -499,4 +499,201 @@ final class TagManagementTests: XCTestCase {
         XCTAssertTrue(undoManager.canUndo, "Should be able to undo after creating tag")
         XCTAssertFalse(undoManager.undoActionName.isEmpty, "Undo action name should not be empty")
     }
+
+    // MARK: - Tag Filter Tests
+
+    func testMatchesTagFilter_NoFilterActive() throws {
+        // Given - Item with no filter active
+        let item = Item(id: "item1", title: "Test Item", itemType: .task)
+        try repository.create(item)
+        itemStore.loadItems()
+
+        // Then - All items should match (no filter)
+        XCTAssertTrue(itemStore.matchesTagFilter(item))
+    }
+
+    func testMatchesTagFilter_DirectMatch() throws {
+        // Given - Item with tag, filter by that tag
+        guard let tag = itemStore.createTag(name: "Work", color: "#FF0000") else {
+            XCTFail("Failed to create tag")
+            return
+        }
+        let item = Item(id: "item1", title: "Test Item", itemType: .task)
+        try repository.create(item)
+        itemStore.loadItems()
+        itemStore.addTagToItem(itemId: item.id, tag: tag)
+
+        // When - Set filter
+        itemStore.filteredByTag = tag
+
+        // Then - Item should match
+        XCTAssertTrue(itemStore.matchesTagFilter(item))
+    }
+
+    func testMatchesTagFilter_NoMatch() throws {
+        // Given - Item without tag, filter active
+        guard let tag = itemStore.createTag(name: "Work", color: "#FF0000") else {
+            XCTFail("Failed to create tag")
+            return
+        }
+        let item = Item(id: "item1", title: "Test Item", itemType: .task)
+        try repository.create(item)
+        itemStore.loadItems()
+
+        // When - Set filter (item doesn't have this tag)
+        itemStore.filteredByTag = tag
+
+        // Then - Item should not match
+        XCTAssertFalse(itemStore.matchesTagFilter(item))
+    }
+
+    func testMatchesTagFilter_DescendantMatch() throws {
+        // Given - Parent item without tag, child with tag
+        guard let tag = itemStore.createTag(name: "Work", color: "#FF0000") else {
+            XCTFail("Failed to create tag")
+            return
+        }
+        let parent = Item(id: "parent1", title: "Parent", itemType: .folder)
+        let child = Item(id: "child1", title: "Child", itemType: .task, parentId: "parent1")
+        try repository.create(parent)
+        try repository.create(child)
+        itemStore.loadItems()
+        itemStore.addTagToItem(itemId: child.id, tag: tag)
+
+        // When - Set filter
+        itemStore.filteredByTag = tag
+
+        // Then - Parent should match (because child has tag)
+        XCTAssertTrue(itemStore.matchesTagFilter(parent))
+    }
+
+    func testMatchesTagFilter_DeepDescendantMatch() throws {
+        // Given - Grandparent -> Parent -> Child, only child has tag
+        guard let tag = itemStore.createTag(name: "Work", color: "#FF0000") else {
+            XCTFail("Failed to create tag")
+            return
+        }
+        let grandparent = Item(id: "gp1", title: "Grandparent", itemType: .folder)
+        let parent = Item(id: "p1", title: "Parent", itemType: .folder, parentId: "gp1")
+        let child = Item(id: "c1", title: "Child", itemType: .task, parentId: "p1")
+        try repository.create(grandparent)
+        try repository.create(parent)
+        try repository.create(child)
+        itemStore.loadItems()
+        itemStore.addTagToItem(itemId: child.id, tag: tag)
+
+        // When - Set filter
+        itemStore.filteredByTag = tag
+
+        // Then - Both ancestors should match
+        XCTAssertTrue(itemStore.matchesTagFilter(grandparent))
+        XCTAssertTrue(itemStore.matchesTagFilter(parent))
+    }
+
+    func testHasDescendantWithTag_NoDescendants() throws {
+        // Given - Item with no children
+        guard let tag = itemStore.createTag(name: "Work", color: "#FF0000") else {
+            XCTFail("Failed to create tag")
+            return
+        }
+        let item = Item(id: "item1", title: "Test Item", itemType: .task)
+        try repository.create(item)
+        itemStore.loadItems()
+
+        // Then - Should return false
+        XCTAssertFalse(itemStore.hasDescendantWithTag(item, tagId: tag.id, allItems: itemStore.items))
+    }
+
+    func testHasDescendantWithTag_DirectChild() throws {
+        // Given - Parent with child that has tag
+        guard let tag = itemStore.createTag(name: "Work", color: "#FF0000") else {
+            XCTFail("Failed to create tag")
+            return
+        }
+        let parent = Item(id: "parent1", title: "Parent", itemType: .folder)
+        let child = Item(id: "child1", title: "Child", itemType: .task, parentId: "parent1")
+        try repository.create(parent)
+        try repository.create(child)
+        itemStore.loadItems()
+        itemStore.addTagToItem(itemId: child.id, tag: tag)
+
+        // Then - Parent should have descendant with tag
+        XCTAssertTrue(itemStore.hasDescendantWithTag(parent, tagId: tag.id, allItems: itemStore.items))
+    }
+
+    func testHasDescendantWithTag_ChildWithoutTag() throws {
+        // Given - Parent with child that doesn't have tag
+        guard let tag = itemStore.createTag(name: "Work", color: "#FF0000") else {
+            XCTFail("Failed to create tag")
+            return
+        }
+        let parent = Item(id: "parent1", title: "Parent", itemType: .folder)
+        let child = Item(id: "child1", title: "Child", itemType: .task, parentId: "parent1")
+        try repository.create(parent)
+        try repository.create(child)
+        itemStore.loadItems()
+
+        // Then - Parent should not have descendant with tag
+        XCTAssertFalse(itemStore.hasDescendantWithTag(parent, tagId: tag.id, allItems: itemStore.items))
+    }
+
+    func testDeleteTagClearsFilterIfActive() throws {
+        // Given - Tag set as active filter
+        guard let tag = itemStore.createTag(name: "Work", color: "#FF0000") else {
+            XCTFail("Failed to create tag")
+            return
+        }
+        itemStore.filteredByTag = tag
+        XCTAssertNotNil(itemStore.filteredByTag)
+
+        // When - Delete the filtered tag
+        itemStore.deleteTag(tagId: tag.id)
+
+        // Then - Filter should be cleared
+        XCTAssertNil(itemStore.filteredByTag)
+    }
+
+    func testDeleteTagDoesNotClearFilterIfDifferent() throws {
+        // Given - Two tags, one set as filter
+        guard let tag1 = itemStore.createTag(name: "Work", color: "#FF0000") else {
+            XCTFail("Failed to create tag1")
+            return
+        }
+        guard let tag2 = itemStore.createTag(name: "Personal", color: "#00FF00") else {
+            XCTFail("Failed to create tag2")
+            return
+        }
+        itemStore.filteredByTag = tag1
+
+        // When - Delete the other tag
+        itemStore.deleteTag(tagId: tag2.id)
+
+        // Then - Filter should still be set to tag1
+        XCTAssertEqual(itemStore.filteredByTag?.id, tag1.id)
+    }
+
+    func testUndoDeleteTagRestoresFilter() throws {
+        // Given - Tag set as filter, then deleted
+        guard let tag = itemStore.createTag(name: "Work", color: "#FF0000") else {
+            XCTFail("Failed to create tag")
+            return
+        }
+        itemStore.filteredByTag = tag
+
+        // Close creation undo group
+        undoManager.endUndoGrouping()
+
+        // Delete in separate group
+        undoManager.beginUndoGrouping()
+        itemStore.deleteTag(tagId: tag.id)
+        undoManager.endUndoGrouping()
+        XCTAssertNil(itemStore.filteredByTag)
+
+        // When - Undo deletion
+        undoManager.undo()
+
+        // Then - Filter should be restored
+        XCTAssertNotNil(itemStore.filteredByTag)
+        XCTAssertEqual(itemStore.filteredByTag?.id, tag.id)
+    }
 }
