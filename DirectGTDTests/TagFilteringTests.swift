@@ -133,6 +133,7 @@ final class TagFilteringTests: XCTestCase {
         try repository.create(parent)
         try repository.create(child1)
         try repository.create(child2)
+        itemStore.loadItems()
 
         let tag = itemStore.createTag(name: "urgent", color: "#FF0000")!
 
@@ -149,6 +150,7 @@ final class TagFilteringTests: XCTestCase {
         // Given: Item has one tag but filter is set to a different tag
         let item = Item(id: "1", title: "Test Item", itemType: .task)
         try repository.create(item)
+        itemStore.loadItems()
 
         let tag1 = itemStore.createTag(name: "urgent", color: "#FF0000")!
         let tag2 = itemStore.createTag(name: "later", color: "#0000FF")!
