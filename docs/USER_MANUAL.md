@@ -435,11 +435,22 @@ All settings **persist across sessions**.
 
 DirectGTD follows one principle: **Get out of your way.**
 
-No tags. No colors. No due dates (yet). No drag-and-drop. No right-click menus. No synchronization anxiety.
+**What we have:**
+- **Tags** - Flexible, color-coded organization for GTD contexts
+- **Search** - Instant filtering to find anything
+- **Hierarchy** - Folders and projects with unlimited nesting
+- **Keyboard-first** - Every core action has a shortcut
+- **Local storage** - Your data stays yours
 
-Just hierarchical lists, item types, your keyboard, and local storage. Fast, focused, friction-free.
+**What we deliberately don't have:**
+- No due dates (yet)
+- No drag-and-drop (keyboard is faster)
+- No right-click menus (keeps it simple)
+- No cloud sync (no synchronization anxiety)
+- No AI suggestions (you know your work best)
+- No social features (this is your personal system)
 
-If you need calendars, reminders, cloud sync, AI suggestions, or social features... you probably need a different app.
+Fast, focused, friction-free. If you need calendars, reminders, team collaboration, or AI assistance... you probably need a different app.
 
 ---
 
