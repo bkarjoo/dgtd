@@ -7,6 +7,8 @@
 
 - When collapsing an item, if a child inside it is selected, change selection to the collapsed parent item
 
+- Add cache invalidation mechanism for ItemStore: Currently ItemStore fetches data on demand via loadItems()/loadTags() with no observers for external DB changes. If edits arrive from another client, background actor, or database migrations, we need to add invalidation (polling, database triggers + notifications, or NotificationCenter signals) so the store knows when to refresh the itemTags cache and items array.
+
 ---
 
 # Tag System Implementation Plan
