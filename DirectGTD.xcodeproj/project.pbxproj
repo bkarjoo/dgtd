@@ -33,9 +33,22 @@
 		1EA486882EC43FAD0017F6CA /* DirectGTDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DirectGTDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		1EA486AA2EC443DF0017F6CB /* Exceptions */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1EA486702EC43FAA0017F6CA /* DirectGTD */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1EA486732EC43FAA0017F6CA /* DirectGTD */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1EA486AA2EC443DF0017F6CB /* Exceptions */,
+			);
 			path = DirectGTD;
 			sourceTree = "<group>";
 		};
