@@ -516,17 +516,13 @@ struct ItemRow: View {
                         let isToday = Calendar.current.isDateInToday(dueDateObj)
                         let isTomorrow = Calendar.current.isDateInTomorrow(dueDateObj)
 
-                        HStack(spacing: 2) {
-                            Image(systemName: "calendar")
-                                .font(.system(size: fontSize * 0.7))
-                            Text(isToday ? "Today" : isTomorrow ? "Tomorrow" : formatDate(dueDateObj))
-                                .font(.system(size: fontSize * 0.8))
-                        }
-                        .foregroundColor(isOverdue ? .red : isToday ? .orange : .secondary)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 2)
-                        .background((isOverdue ? Color.red : isToday ? Color.orange : Color.secondary).opacity(0.1))
-                        .cornerRadius(4)
+                        Text(isToday ? "Today" : isTomorrow ? "Tomorrow" : formatDate(dueDateObj))
+                            .font(.system(size: fontSize * 0.8))
+                            .foregroundColor(isOverdue ? .red : isToday ? .orange : .secondary)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background((isOverdue ? Color.red : isToday ? Color.orange : Color.secondary).opacity(0.1))
+                            .cornerRadius(4)
                     }
 
                     if let startTime = item.earliestStartTime {
@@ -534,17 +530,13 @@ struct ItemRow: View {
                         let isDeferred = startDateObj > Date()
 
                         if isDeferred {
-                            HStack(spacing: 2) {
-                                Image(systemName: "clock")
-                                    .font(.system(size: fontSize * 0.7))
-                                Text(formatDate(startDateObj))
-                                    .font(.system(size: fontSize * 0.8))
-                            }
-                            .foregroundColor(.blue)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(Color.blue.opacity(0.1))
-                            .cornerRadius(4)
+                            Text(formatDate(startDateObj))
+                                .font(.system(size: fontSize * 0.8))
+                                .foregroundColor(.blue)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                                .background(Color.blue.opacity(0.1))
+                                .cornerRadius(4)
                         }
                     }
 

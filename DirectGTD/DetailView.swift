@@ -29,10 +29,31 @@ struct DetailView: View {
                     }
 
                     Section("Dates") {
-                        Toggle(isOn: Binding(
-                            get: { selectedItem.dueDate != nil },
-                            set: { isOn in
-                                if isOn {
+                        HStack {
+                            Text("Due Date")
+                            Spacer()
+                            if selectedItem.dueDate != nil {
+                                DatePicker(
+                                    "",
+                                    selection: Binding(
+                                        get: { Date(timeIntervalSince1970: TimeInterval(selectedItem.dueDate ?? 0)) },
+                                        set: { newDate in
+                                            store.updateDueDate(id: selectedId, dueDate: Int(newDate.timeIntervalSince1970))
+                                        }
+                                    ),
+                                    displayedComponents: [.date, .hourAndMinute]
+                                )
+                                .labelsHidden()
+
+                                Button(action: {
+                                    store.updateDueDate(id: selectedId, dueDate: nil)
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                Button("Set") {
                                     // Set to tomorrow at 5pm by default
                                     let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
                                     let components = Calendar.current.dateComponents([.year, .month, .day], from: tomorrow)
@@ -44,57 +65,42 @@ struct DetailView: View {
                                         minute: 0
                                     )) ?? tomorrow
                                     store.updateDueDate(id: selectedId, dueDate: Int(tomorrowAt5pm.timeIntervalSince1970))
-                                } else {
-                                    store.updateDueDate(id: selectedId, dueDate: nil)
                                 }
                             }
-                        )) {
-                            Text("Due Date")
                         }
 
-                        if selectedItem.dueDate != nil {
-                            DatePicker(
-                                "",
-                                selection: Binding(
-                                    get: { Date(timeIntervalSince1970: TimeInterval(selectedItem.dueDate ?? 0)) },
-                                    set: { newDate in
-                                        store.updateDueDate(id: selectedId, dueDate: Int(newDate.timeIntervalSince1970))
-                                    }
-                                ),
-                                displayedComponents: [.date, .hourAndMinute]
-                            )
-                            .datePickerStyle(.graphical)
-                        }
+                        HStack {
+                            Text("Earliest Start")
+                            Spacer()
+                            if selectedItem.earliestStartTime != nil {
+                                DatePicker(
+                                    "",
+                                    selection: Binding(
+                                        get: { Date(timeIntervalSince1970: TimeInterval(selectedItem.earliestStartTime ?? 0)) },
+                                        set: { newDate in
+                                            store.updateEarliestStartTime(id: selectedId, earliestStartTime: Int(newDate.timeIntervalSince1970))
+                                        }
+                                    ),
+                                    displayedComponents: [.date]
+                                )
+                                .labelsHidden()
 
-                        Toggle(isOn: Binding(
-                            get: { selectedItem.earliestStartTime != nil },
-                            set: { isOn in
-                                if isOn {
+                                Button(action: {
+                                    store.updateEarliestStartTime(id: selectedId, earliestStartTime: nil)
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                Button("Set") {
                                     // Set to today at midnight by default
                                     let today = Date()
                                     let components = Calendar.current.dateComponents([.year, .month, .day], from: today)
                                     let todayMidnight = Calendar.current.date(from: components) ?? today
                                     store.updateEarliestStartTime(id: selectedId, earliestStartTime: Int(todayMidnight.timeIntervalSince1970))
-                                } else {
-                                    store.updateEarliestStartTime(id: selectedId, earliestStartTime: nil)
                                 }
                             }
-                        )) {
-                            Text("Earliest Start")
-                        }
-
-                        if selectedItem.earliestStartTime != nil {
-                            DatePicker(
-                                "",
-                                selection: Binding(
-                                    get: { Date(timeIntervalSince1970: TimeInterval(selectedItem.earliestStartTime ?? 0)) },
-                                    set: { newDate in
-                                        store.updateEarliestStartTime(id: selectedId, earliestStartTime: Int(newDate.timeIntervalSince1970))
-                                    }
-                                ),
-                                displayedComponents: [.date]
-                            )
-                            .datePickerStyle(.graphical)
                         }
                     }
 
