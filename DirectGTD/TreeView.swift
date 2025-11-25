@@ -1,6 +1,10 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+extension UTType {
+    static let directGTDItem = UTType(exportedAs: "com.directgtd.item-id")
+}
+
 struct TreeView: View {
     @ObservedObject var store: ItemStore
     @ObservedObject var settings: UserSettings
@@ -539,9 +543,15 @@ struct ItemRow: View {
             }
             .onDrag {
                 store.draggedItemId = item.id
-                return NSItemProvider(object: item.id as NSString)
+                let provider = NSItemProvider()
+                provider.registerDataRepresentation(forTypeIdentifier: UTType.directGTDItem.identifier, visibility: .all) { completion in
+                    let data = item.id.data(using: .utf8)
+                    completion(data, nil)
+                    return nil
+                }
+                return provider
             }
-            .onDrop(of: [.text], delegate: ItemDropDelegate(
+            .onDrop(of: [.directGTDItem], delegate: ItemDropDelegate(
                 item: item,
                 allItems: allItems,
                 store: store
@@ -645,40 +655,15 @@ struct ItemDropDelegate: DropDelegate {
     let allItems: [Item]
     let store: ItemStore
 
-    func dropEntered(info: DropInfo) {
-        // Verify payload matches our tracked drag; clear stale state if not
-        guard let itemProvider = info.itemProviders(for: [.text]).first else {
-            store.draggedItemId = nil
-            return
-        }
-
-        itemProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { data, error in
-            guard let data = data as? Data,
-                  let payloadId = String(data: data, encoding: .utf8) else {
-                DispatchQueue.main.async {
-                    store.draggedItemId = nil
-                }
-                return
-            }
-
-            DispatchQueue.main.async {
-                // If payload doesn't match tracked ID, clear the stale state
-                if store.draggedItemId != payloadId {
-                    store.draggedItemId = nil
-                }
-            }
-        }
-    }
-
     func performDrop(info: DropInfo) -> Bool {
         defer { store.draggedItemId = nil }
 
-        guard let itemProvider = info.itemProviders(for: [.text]).first else {
+        guard let itemProvider = info.itemProviders(for: [.directGTDItem]).first else {
             return false
         }
 
-        itemProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { data, error in
-            guard let data = data as? Data,
+        itemProvider.loadDataRepresentation(forTypeIdentifier: UTType.directGTDItem.identifier) { data, error in
+            guard let data = data,
                   let draggedItemId = String(data: data, encoding: .utf8) else {
                 return
             }
@@ -692,12 +677,13 @@ struct ItemDropDelegate: DropDelegate {
     }
 
     func validateDrop(info: DropInfo) -> Bool {
-        // Ensure we have a dragged item
-        guard !info.itemProviders(for: [.text]).isEmpty else {
+        // Only accept drops with our custom type (rejects external drags automatically)
+        guard info.itemProviders(for: [.directGTDItem]).first != nil else {
             return false
         }
 
-        // Validate the drop using the store's tracked dragged item
+        // Validate using tracked draggedItemId (synchronous)
+        // Custom UTType ensures this is always a real in-app drag, never spoofed
         return store.canDropItem(draggedItemId: store.draggedItemId, onto: item.id)
     }
 }
