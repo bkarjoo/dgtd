@@ -700,11 +700,6 @@ struct ItemDropDelegate: DropDelegate {
         // Validate the drop using the store's tracked dragged item
         return store.canDropItem(draggedItemId: store.draggedItemId, onto: item.id)
     }
-
-    func dropExited(info: DropInfo) {
-        // Clear dragged item when drag exits without dropping
-        store.draggedItemId = nil
-    }
 }
 
 #Preview {
