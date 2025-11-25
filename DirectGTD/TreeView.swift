@@ -670,6 +670,7 @@ struct ItemDropDelegate: DropDelegate {
 
             DispatchQueue.main.async {
                 store.moveItem(draggedItemId: draggedItemId, targetItemId: item.id)
+                store.selectedItemId = draggedItemId
             }
         }
 
@@ -677,21 +678,18 @@ struct ItemDropDelegate: DropDelegate {
     }
 
     func validateDrop(info: DropInfo) -> Bool {
-        print("validateDrop called for item: \(item.id)")
-        print("Available types: \(info.itemProviders(for: [.directGTDItem]).count)")
-        print("draggedItemId: \(store.draggedItemId ?? "nil")")
-
         // Only accept drops with our custom type (rejects external drags automatically)
         guard info.itemProviders(for: [.directGTDItem]).first != nil else {
-            print("No provider for directGTDItem found")
             return false
         }
 
         // Validate using tracked draggedItemId (synchronous)
         // Custom UTType ensures this is always a real in-app drag, never spoofed
-        let canDrop = store.canDropItem(draggedItemId: store.draggedItemId, onto: item.id)
-        print("canDrop result: \(canDrop)")
-        return canDrop
+        return store.canDropItem(draggedItemId: store.draggedItemId, onto: item.id)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        return DropProposal(operation: .move)
     }
 }
 
