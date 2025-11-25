@@ -3,11 +3,19 @@ import SwiftUI
 import Combine
 import GRDB
 
+enum DropPosition {
+    case above
+    case into
+    case below
+}
+
 class ItemStore: ObservableObject {
     @Published private(set) var items: [Item] = []
     @Published var selectedItemId: String?
     @Published var editingItemId: String?
     @Published var showingQuickCapture: Bool = false
+    @Published var dropTargetId: String? = nil
+    @Published var dropTargetPosition: DropPosition? = nil
     @Published var completionDidChange: Bool = false
     @Published var errorMessage: String?
     @Published var searchText: String = ""
@@ -291,7 +299,7 @@ class ItemStore: ObservableObject {
         }
     }
 
-    func canDropItem(draggedItemId: String?, onto targetItemId: String) -> Bool {
+    func canDropItem(draggedItemId: String?, onto targetItemId: String, position: DropPosition) -> Bool {
         guard let draggedId = draggedItemId else { return false }
         guard let draggedItem = items.first(where: { $0.id == draggedId }) else { return false }
 
@@ -303,45 +311,102 @@ class ItemStore: ObservableObject {
             return false
         }
 
-        // Prevent dropping a parent into its own descendant
-        if isDescendant(of: draggedItem, itemId: targetItemId) {
+        // For .into position, prevent dropping a parent into its own descendant
+        if position == .into && isDescendant(of: draggedItem, itemId: targetItemId) {
             return false
+        }
+
+        // For .above/.below, we're inserting as a sibling, so descendant check doesn't apply to target
+        // But we still need to check if the target's parent would create a circular reference
+        if position == .above || position == .below {
+            guard let targetItem = items.first(where: { $0.id == targetItemId }) else { return false }
+            if let targetParentId = targetItem.parentId {
+                // Check if dragged item is an ancestor of the target's parent
+                if isDescendant(of: draggedItem, itemId: targetParentId) {
+                    return false
+                }
+            }
         }
 
         return true
     }
 
-    func moveItem(draggedItemId: String, targetItemId: String) {
+    func moveItem(draggedItemId: String, targetItemId: String, position: DropPosition) {
         guard let draggedItem = items.first(where: { $0.id == draggedItemId }) else { return }
-
-        // Verify target exists
-        guard items.contains(where: { $0.id == targetItemId }) else { return }
+        guard let targetItem = items.first(where: { $0.id == targetItemId }) else { return }
 
         // Prevent dropping an item into itself
         if draggedItemId == targetItemId {
             return
         }
 
-        // Prevent dropping a parent into its own descendant
-        if isDescendant(of: draggedItem, itemId: targetItemId) {
-            return
-        }
-
-        // Expand the target item so the drop result is visible
-        settings.expandedItemIds.insert(targetItemId)
-
         // Store original state for undo
         let originalParentId = draggedItem.parentId
         let originalSortOrder = draggedItem.sortOrder
 
-        // Update the dragged item to become a child of the target
         var updatedItem = draggedItem
-        updatedItem.parentId = targetItemId
 
-        // Find the highest sortOrder among existing children of the target
-        let existingChildren = items.filter { $0.parentId == targetItemId }
-        let maxSortOrder = existingChildren.map { $0.sortOrder }.max() ?? -1
-        updatedItem.sortOrder = maxSortOrder + 1
+        switch position {
+        case .into:
+            // Prevent dropping a parent into its own descendant
+            if isDescendant(of: draggedItem, itemId: targetItemId) {
+                return
+            }
+
+            // Expand the target item so the drop result is visible
+            settings.expandedItemIds.insert(targetItemId)
+
+            // Update the dragged item to become a child of the target
+            updatedItem.parentId = targetItemId
+
+            // Find the highest sortOrder among existing children of the target
+            let existingChildren = items.filter { $0.parentId == targetItemId }
+            let maxSortOrder = existingChildren.map { $0.sortOrder }.max() ?? -1
+            updatedItem.sortOrder = maxSortOrder + 1
+
+        case .above, .below:
+            // Insert as sibling - same parent as target
+            updatedItem.parentId = targetItem.parentId
+
+            // Get all siblings (items with same parent as target)
+            let siblings = items.filter { $0.parentId == targetItem.parentId && $0.id != draggedItemId }
+                .sorted { $0.sortOrder < $1.sortOrder }
+
+            // Find target's position in sibling list
+            guard let targetIndex = siblings.firstIndex(where: { $0.id == targetItemId }) else { return }
+
+            // Calculate new sort order
+            if position == .above {
+                // Insert before target
+                if targetIndex == 0 {
+                    // Insert at beginning
+                    updatedItem.sortOrder = (siblings.first?.sortOrder ?? 0) - 1
+                } else {
+                    // Insert between previous and target
+                    let prevSortOrder = siblings[targetIndex - 1].sortOrder
+                    let targetSortOrder = siblings[targetIndex].sortOrder
+                    updatedItem.sortOrder = (prevSortOrder + targetSortOrder) / 2
+                }
+            } else { // .below
+                // Insert after target
+                if targetIndex == siblings.count - 1 {
+                    // Insert at end
+                    updatedItem.sortOrder = (siblings.last?.sortOrder ?? 0) + 1
+                } else {
+                    // Insert between target and next
+                    let targetSortOrder = siblings[targetIndex].sortOrder
+                    let nextSortOrder = siblings[targetIndex + 1].sortOrder
+                    updatedItem.sortOrder = (targetSortOrder + nextSortOrder) / 2
+                }
+            }
+
+            // If parent is expanded, keep it that way
+            if let parentId = updatedItem.parentId {
+                if settings.expandedItemIds.contains(parentId) {
+                    // Parent already expanded, no change needed
+                }
+            }
+        }
 
         do {
             try repository.update(updatedItem)

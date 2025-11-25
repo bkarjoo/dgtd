@@ -566,6 +566,20 @@ struct ItemRow: View {
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
+            .overlay(alignment: .top) {
+                if store.dropTargetId == item.id && store.dropTargetPosition == .above {
+                    Rectangle()
+                        .fill(Color.accentColor)
+                        .frame(height: 2)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if store.dropTargetId == item.id && store.dropTargetPosition == .below {
+                    Rectangle()
+                        .fill(Color.accentColor)
+                        .frame(height: 2)
+                }
+            }
             .contentShape(Rectangle())
             .onTapGesture {
                 DispatchQueue.main.async {
@@ -696,7 +710,11 @@ struct ItemDropDelegate: DropDelegate {
     let store: ItemStore
 
     func performDrop(info: DropInfo) -> Bool {
-        defer { store.draggedItemId = nil }
+        defer {
+            store.draggedItemId = nil
+            store.dropTargetId = nil
+            store.dropTargetPosition = nil
+        }
 
         guard let itemProvider = info.itemProviders(for: [.directGTDItem]).first else {
             return false
@@ -709,7 +727,8 @@ struct ItemDropDelegate: DropDelegate {
             }
 
             DispatchQueue.main.async {
-                store.moveItem(draggedItemId: draggedItemId, targetItemId: item.id)
+                let position = getDropPosition(info: info)
+                store.moveItem(draggedItemId: draggedItemId, targetItemId: item.id, position: position)
                 store.selectedItemId = draggedItemId
             }
         }
@@ -725,11 +744,42 @@ struct ItemDropDelegate: DropDelegate {
 
         // Validate using tracked draggedItemId (synchronous)
         // Custom UTType ensures this is always a real in-app drag, never spoofed
-        return store.canDropItem(draggedItemId: store.draggedItemId, onto: item.id)
+        let position = getDropPosition(info: info)
+        return store.canDropItem(draggedItemId: store.draggedItemId, onto: item.id, position: position)
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
+        let position = getDropPosition(info: info)
+        store.dropTargetId = item.id
+        store.dropTargetPosition = position
         return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        if store.dropTargetId == item.id {
+            store.dropTargetId = nil
+            store.dropTargetPosition = nil
+        }
+    }
+
+    private func getDropPosition(info: DropInfo) -> DropPosition {
+        // Divide the item into three zones: top 25%, middle 50%, bottom 25%
+        let location = info.location.y
+
+        // We need the bounds from the view, but we can approximate based on font size
+        // Typical row height is around 28-32 pixels
+        let estimatedRowHeight: CGFloat = 30
+
+        // Calculate relative position (0-1)
+        let relativeY = location.truncatingRemainder(dividingBy: estimatedRowHeight) / estimatedRowHeight
+
+        if relativeY < 0.25 {
+            return .above
+        } else if relativeY > 0.75 {
+            return .below
+        } else {
+            return .into
+        }
     }
 }
 
