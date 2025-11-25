@@ -453,4 +453,144 @@ final class ItemStoreTests: XCTestCase {
         XCTAssertEqual(movedItem?.parentId, "target")
         XCTAssertEqual(movedItem?.sortOrder, 2)
     }
+
+    // MARK: - Date Tests
+
+    func testUpdateDueDate() throws {
+        // Given - Create an item
+        let item = Item(id: "test", title: "Test", itemType: .task)
+        try repository.create(item)
+        itemStore.loadItems()
+
+        // When - Set due date
+        let dueDate = Int(Date().timeIntervalSince1970)
+        itemStore.updateDueDate(id: "test", dueDate: dueDate)
+
+        // Then - Due date should be set
+        let updatedItem = itemStore.items.first(where: { $0.id == "test" })
+        XCTAssertEqual(updatedItem?.dueDate, dueDate)
+    }
+
+    func testClearDueDate() throws {
+        // Given - Create an item with due date
+        let dueDate = Int(Date().timeIntervalSince1970)
+        let item = Item(id: "test", title: "Test", itemType: .task, dueDate: dueDate)
+        try repository.create(item)
+        itemStore.loadItems()
+
+        // When - Clear due date
+        itemStore.updateDueDate(id: "test", dueDate: nil)
+
+        // Then - Due date should be cleared
+        let updatedItem = itemStore.items.first(where: { $0.id == "test" })
+        XCTAssertNil(updatedItem?.dueDate)
+    }
+
+    func testUpdateDueDateUndo() throws {
+        // Given - Create an item
+        let item = Item(id: "test", title: "Test", itemType: .task)
+        try repository.create(item)
+        itemStore.loadItems()
+        itemStore.undoManager = UndoManager()
+
+        // When - Set due date and undo
+        let dueDate = Int(Date().timeIntervalSince1970)
+        itemStore.updateDueDate(id: "test", dueDate: dueDate)
+        itemStore.undoManager?.undo()
+
+        // Then - Due date should be cleared
+        let updatedItem = itemStore.items.first(where: { $0.id == "test" })
+        XCTAssertNil(updatedItem?.dueDate)
+    }
+
+    func testUpdateEarliestStartTime() throws {
+        // Given - Create an item
+        let item = Item(id: "test", title: "Test", itemType: .task)
+        try repository.create(item)
+        itemStore.loadItems()
+
+        // When - Set earliest start time
+        let startTime = Int(Date().timeIntervalSince1970)
+        itemStore.updateEarliestStartTime(id: "test", earliestStartTime: startTime)
+
+        // Then - Earliest start time should be set
+        let updatedItem = itemStore.items.first(where: { $0.id == "test" })
+        XCTAssertEqual(updatedItem?.earliestStartTime, startTime)
+    }
+
+    func testClearEarliestStartTime() throws {
+        // Given - Create an item with earliest start time
+        let startTime = Int(Date().timeIntervalSince1970)
+        let item = Item(id: "test", title: "Test", itemType: .task, earliestStartTime: startTime)
+        try repository.create(item)
+        itemStore.loadItems()
+
+        // When - Clear earliest start time
+        itemStore.updateEarliestStartTime(id: "test", earliestStartTime: nil)
+
+        // Then - Earliest start time should be cleared
+        let updatedItem = itemStore.items.first(where: { $0.id == "test" })
+        XCTAssertNil(updatedItem?.earliestStartTime)
+    }
+
+    func testUpdateEarliestStartTimeUndo() throws {
+        // Given - Create an item
+        let item = Item(id: "test", title: "Test", itemType: .task)
+        try repository.create(item)
+        itemStore.loadItems()
+        itemStore.undoManager = UndoManager()
+
+        // When - Set earliest start time and undo
+        let startTime = Int(Date().timeIntervalSince1970)
+        itemStore.updateEarliestStartTime(id: "test", earliestStartTime: startTime)
+        itemStore.undoManager?.undo()
+
+        // Then - Earliest start time should be cleared
+        let updatedItem = itemStore.items.first(where: { $0.id == "test" })
+        XCTAssertNil(updatedItem?.earliestStartTime)
+    }
+
+    func testUpdateDueDateUpdatesModifiedAt() throws {
+        // Given - Create an item
+        let item = Item(id: "test", title: "Test", itemType: .task)
+        try repository.create(item)
+        itemStore.loadItems()
+        let originalModifiedAt = itemStore.items.first(where: { $0.id == "test" })?.modifiedAt
+
+        // Wait to ensure time difference in integer seconds
+        Thread.sleep(forTimeInterval: 1.1)
+
+        // When - Set due date
+        let dueDate = Int(Date().timeIntervalSince1970)
+        itemStore.updateDueDate(id: "test", dueDate: dueDate)
+
+        // Then - modifiedAt should be updated
+        let updatedItem = itemStore.items.first(where: { $0.id == "test" })
+        XCTAssertNotNil(updatedItem?.modifiedAt)
+        if let original = originalModifiedAt, let updated = updatedItem?.modifiedAt {
+            XCTAssertGreaterThan(updated, original, "modifiedAt should be updated to a later timestamp")
+        }
+    }
+
+    func testUpdateEarliestStartTimeUpdatesModifiedAt() throws {
+        // Given - Create an item
+        let item = Item(id: "test", title: "Test", itemType: .task)
+        try repository.create(item)
+        itemStore.loadItems()
+        let originalModifiedAt = itemStore.items.first(where: { $0.id == "test" })?.modifiedAt
+
+        // Wait to ensure time difference in integer seconds
+        Thread.sleep(forTimeInterval: 1.1)
+
+        // When - Set earliest start time
+        let startTime = Int(Date().timeIntervalSince1970)
+        itemStore.updateEarliestStartTime(id: "test", earliestStartTime: startTime)
+
+        // Then - modifiedAt should be updated
+        let updatedItem = itemStore.items.first(where: { $0.id == "test" })
+        XCTAssertNotNil(updatedItem?.modifiedAt)
+        if let original = originalModifiedAt, let updated = updatedItem?.modifiedAt {
+            XCTAssertGreaterThan(updated, original, "modifiedAt should be updated to a later timestamp")
+        }
+    }
 }

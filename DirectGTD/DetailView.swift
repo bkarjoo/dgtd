@@ -28,6 +28,76 @@ struct DetailView: View {
                         .pickerStyle(.menu)
                     }
 
+                    Section("Dates") {
+                        Toggle(isOn: Binding(
+                            get: { selectedItem.dueDate != nil },
+                            set: { isOn in
+                                if isOn {
+                                    // Set to tomorrow at 5pm by default
+                                    let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+                                    let components = Calendar.current.dateComponents([.year, .month, .day], from: tomorrow)
+                                    let tomorrowAt5pm = Calendar.current.date(from: DateComponents(
+                                        year: components.year,
+                                        month: components.month,
+                                        day: components.day,
+                                        hour: 17,
+                                        minute: 0
+                                    )) ?? tomorrow
+                                    store.updateDueDate(id: selectedId, dueDate: Int(tomorrowAt5pm.timeIntervalSince1970))
+                                } else {
+                                    store.updateDueDate(id: selectedId, dueDate: nil)
+                                }
+                            }
+                        )) {
+                            Text("Due Date")
+                        }
+
+                        if selectedItem.dueDate != nil {
+                            DatePicker(
+                                "",
+                                selection: Binding(
+                                    get: { Date(timeIntervalSince1970: TimeInterval(selectedItem.dueDate ?? 0)) },
+                                    set: { newDate in
+                                        store.updateDueDate(id: selectedId, dueDate: Int(newDate.timeIntervalSince1970))
+                                    }
+                                ),
+                                displayedComponents: [.date, .hourAndMinute]
+                            )
+                            .datePickerStyle(.graphical)
+                        }
+
+                        Toggle(isOn: Binding(
+                            get: { selectedItem.earliestStartTime != nil },
+                            set: { isOn in
+                                if isOn {
+                                    // Set to today at midnight by default
+                                    let today = Date()
+                                    let components = Calendar.current.dateComponents([.year, .month, .day], from: today)
+                                    let todayMidnight = Calendar.current.date(from: components) ?? today
+                                    store.updateEarliestStartTime(id: selectedId, earliestStartTime: Int(todayMidnight.timeIntervalSince1970))
+                                } else {
+                                    store.updateEarliestStartTime(id: selectedId, earliestStartTime: nil)
+                                }
+                            }
+                        )) {
+                            Text("Earliest Start")
+                        }
+
+                        if selectedItem.earliestStartTime != nil {
+                            DatePicker(
+                                "",
+                                selection: Binding(
+                                    get: { Date(timeIntervalSince1970: TimeInterval(selectedItem.earliestStartTime ?? 0)) },
+                                    set: { newDate in
+                                        store.updateEarliestStartTime(id: selectedId, earliestStartTime: Int(newDate.timeIntervalSince1970))
+                                    }
+                                ),
+                                displayedComponents: [.date]
+                            )
+                            .datePickerStyle(.graphical)
+                        }
+                    }
+
                     Section("Tags") {
                         FlowLayout(spacing: 8) {
                             ForEach(store.getTagsForItem(itemId: selectedId)) { tag in

@@ -509,6 +509,45 @@ struct ItemRow: View {
 
                     Spacer()
 
+                    // Date badges
+                    if let dueDate = item.dueDate {
+                        let dueDateObj = Date(timeIntervalSince1970: TimeInterval(dueDate))
+                        let isOverdue = dueDateObj < Date()
+                        let isToday = Calendar.current.isDateInToday(dueDateObj)
+                        let isTomorrow = Calendar.current.isDateInTomorrow(dueDateObj)
+
+                        HStack(spacing: 2) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: fontSize * 0.7))
+                            Text(isToday ? "Today" : isTomorrow ? "Tomorrow" : formatDate(dueDateObj))
+                                .font(.system(size: fontSize * 0.8))
+                        }
+                        .foregroundColor(isOverdue ? .red : isToday ? .orange : .secondary)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background((isOverdue ? Color.red : isToday ? Color.orange : Color.secondary).opacity(0.1))
+                        .cornerRadius(4)
+                    }
+
+                    if let startTime = item.earliestStartTime {
+                        let startDateObj = Date(timeIntervalSince1970: TimeInterval(startTime))
+                        let isDeferred = startDateObj > Date()
+
+                        if isDeferred {
+                            HStack(spacing: 2) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: fontSize * 0.7))
+                                Text(formatDate(startDateObj))
+                                    .font(.system(size: fontSize * 0.8))
+                            }
+                            .foregroundColor(.blue)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(4)
+                        }
+                    }
+
                     // Tag count badge
                     if tagCount > 0 {
                         HStack(spacing: 2) {
@@ -597,6 +636,13 @@ struct ItemRow: View {
 
     private var tagCount: Int {
         store.getTagsForItem(itemId: item.id).count
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
     }
 
     private func commitEdit() {

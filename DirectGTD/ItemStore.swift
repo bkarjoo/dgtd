@@ -164,6 +164,48 @@ class ItemStore: ObservableObject {
         }
     }
 
+    func updateDueDate(id: String, dueDate: Int?) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+
+        do {
+            let oldDueDate = items[index].dueDate
+            var item = items[index]
+            item.dueDate = dueDate
+            item.modifiedAt = Int(Date().timeIntervalSince1970)
+            try repository.update(item)
+            items[index] = item
+
+            // Register undo
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.updateDueDate(id: id, dueDate: oldDueDate)
+            }
+            undoManager?.setActionName(dueDate == nil ? "Clear Due Date" : "Set Due Date")
+        } catch {
+            print("Error updating due date: \(error)")
+        }
+    }
+
+    func updateEarliestStartTime(id: String, earliestStartTime: Int?) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+
+        do {
+            let oldEarliestStartTime = items[index].earliestStartTime
+            var item = items[index]
+            item.earliestStartTime = earliestStartTime
+            item.modifiedAt = Int(Date().timeIntervalSince1970)
+            try repository.update(item)
+            items[index] = item
+
+            // Register undo
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.updateEarliestStartTime(id: id, earliestStartTime: oldEarliestStartTime)
+            }
+            undoManager?.setActionName(earliestStartTime == nil ? "Clear Start Date" : "Set Start Date")
+        } catch {
+            print("Error updating earliest start time: \(error)")
+        }
+    }
+
     func toggleTaskCompletion(id: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
 
