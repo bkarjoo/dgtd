@@ -538,7 +538,8 @@ struct ItemRow: View {
                 }
             }
             .onDrag {
-                NSItemProvider(object: item.id as NSString)
+                store.draggedItemId = item.id
+                return NSItemProvider(object: item.id as NSString)
             }
             .onDrop(of: [.text], delegate: ItemDropDelegate(
                 item: item,
@@ -646,17 +647,22 @@ struct ItemDropDelegate: DropDelegate {
 
     func performDrop(info: DropInfo) -> Bool {
         guard let itemProvider = info.itemProviders(for: [.text]).first else {
+            store.draggedItemId = nil
             return false
         }
 
         itemProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { data, error in
             guard let data = data as? Data,
                   let draggedItemId = String(data: data, encoding: .utf8) else {
+                DispatchQueue.main.async {
+                    store.draggedItemId = nil
+                }
                 return
             }
 
             DispatchQueue.main.async {
                 store.moveItem(draggedItemId: draggedItemId, targetItemId: item.id)
+                store.draggedItemId = nil
             }
         }
 
@@ -668,7 +674,9 @@ struct ItemDropDelegate: DropDelegate {
         guard !info.itemProviders(for: [.text]).isEmpty else {
             return false
         }
-        return true
+
+        // Validate the drop using the store's tracked dragged item
+        return store.canDropItem(draggedItemId: store.draggedItemId, onto: item.id)
     }
 }
 

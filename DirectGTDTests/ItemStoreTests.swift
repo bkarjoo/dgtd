@@ -303,4 +303,154 @@ final class ItemStoreTests: XCTestCase {
         let updatedItem2 = itemStore.items.first(where: { $0.id == "item2" })
         XCTAssertEqual(updatedItem2?.sortOrder, 2)
     }
+
+    // MARK: - Drag and Drop Tests
+
+    func testMoveItemBasic() throws {
+        // Given - Two root items
+        let item1 = Item(id: "item1", title: "Item 1", itemType: .project, sortOrder: 0)
+        let item2 = Item(id: "item2", title: "Item 2", itemType: .task, sortOrder: 1)
+        try repository.create(item1)
+        try repository.create(item2)
+        itemStore.loadItems()
+
+        // When - Move item2 into item1
+        itemStore.moveItem(draggedItemId: "item2", targetItemId: "item1")
+
+        // Then - item2 should be child of item1
+        let movedItem = itemStore.items.first(where: { $0.id == "item2" })
+        XCTAssertEqual(movedItem?.parentId, "item1")
+        XCTAssertEqual(movedItem?.sortOrder, 0)
+    }
+
+    func testMoveItemPreventsSelfDrop() throws {
+        // Given - One item
+        let item = Item(id: "item1", title: "Item 1", itemType: .task, sortOrder: 0)
+        try repository.create(item)
+        itemStore.loadItems()
+
+        // When - Try to move item into itself
+        itemStore.moveItem(draggedItemId: "item1", targetItemId: "item1")
+
+        // Then - Item should remain unchanged
+        let unchangedItem = itemStore.items.first(where: { $0.id == "item1" })
+        XCTAssertNil(unchangedItem?.parentId)
+        XCTAssertEqual(unchangedItem?.sortOrder, 0)
+    }
+
+    func testMoveItemPreventsParentIntoDescendant() throws {
+        // Given - Parent with child
+        let parent = Item(id: "parent", title: "Parent", itemType: .project, sortOrder: 0)
+        let child = Item(id: "child", title: "Child", itemType: .task, parentId: "parent", sortOrder: 0)
+        try repository.create(parent)
+        try repository.create(child)
+        itemStore.loadItems()
+
+        // When - Try to move parent into its own child
+        itemStore.moveItem(draggedItemId: "parent", targetItemId: "child")
+
+        // Then - Parent should remain unchanged
+        let unchangedParent = itemStore.items.first(where: { $0.id == "parent" })
+        XCTAssertNil(unchangedParent?.parentId)
+    }
+
+    func testMoveItemExpandsTarget() throws {
+        // Given - Two items, target is collapsed
+        let target = Item(id: "target", title: "Target", itemType: .project, sortOrder: 0)
+        let item = Item(id: "item", title: "Item", itemType: .task, sortOrder: 1)
+        try repository.create(target)
+        try repository.create(item)
+        itemStore.loadItems()
+        settings.expandedItemIds.remove("target")
+
+        // When - Move item into target
+        itemStore.moveItem(draggedItemId: "item", targetItemId: "target")
+
+        // Then - Target should be expanded
+        XCTAssertTrue(settings.expandedItemIds.contains("target"))
+    }
+
+    func testMoveItemUndoRedo() throws {
+        // Given - Two root items with undo manager
+        let item1 = Item(id: "item1", title: "Item 1", itemType: .project, sortOrder: 0)
+        let item2 = Item(id: "item2", title: "Item 2", itemType: .task, sortOrder: 1)
+        try repository.create(item1)
+        try repository.create(item2)
+        itemStore.loadItems()
+        let undoManager = UndoManager()
+        itemStore.undoManager = undoManager
+
+        // When - Move item2 into item1
+        itemStore.moveItem(draggedItemId: "item2", targetItemId: "item1")
+        XCTAssertTrue(undoManager.canUndo)
+
+        // Then - Undo should restore original state
+        undoManager.undo()
+        let restoredItem = itemStore.items.first(where: { $0.id == "item2" })
+        XCTAssertNil(restoredItem?.parentId)
+        XCTAssertEqual(restoredItem?.sortOrder, 1)
+
+        // And - Redo should reapply the move
+        XCTAssertTrue(undoManager.canRedo)
+        undoManager.redo()
+        let removedItem = itemStore.items.first(where: { $0.id == "item2" })
+        XCTAssertEqual(removedItem?.parentId, "item1")
+    }
+
+    func testCanDropItemValidCases() throws {
+        // Given - Parent with two children
+        let parent = Item(id: "parent", title: "Parent", itemType: .project, sortOrder: 0)
+        let child1 = Item(id: "child1", title: "Child 1", itemType: .task, parentId: "parent", sortOrder: 0)
+        let child2 = Item(id: "child2", title: "Child 2", itemType: .task, parentId: "parent", sortOrder: 1)
+        try repository.create(parent)
+        try repository.create(child1)
+        try repository.create(child2)
+        itemStore.loadItems()
+
+        // Then - Valid drops should return true
+        XCTAssertTrue(itemStore.canDropItem(draggedItemId: "child1", onto: "child2"))
+        XCTAssertTrue(itemStore.canDropItem(draggedItemId: "child2", onto: "child1"))
+    }
+
+    func testCanDropItemInvalidCases() throws {
+        // Given - Parent with child
+        let parent = Item(id: "parent", title: "Parent", itemType: .project, sortOrder: 0)
+        let child = Item(id: "child", title: "Child", itemType: .task, parentId: "parent", sortOrder: 0)
+        try repository.create(parent)
+        try repository.create(child)
+        itemStore.loadItems()
+
+        // Then - Invalid drops should return false
+        // Self-drop
+        XCTAssertFalse(itemStore.canDropItem(draggedItemId: "parent", onto: "parent"))
+        // Parent into descendant
+        XCTAssertFalse(itemStore.canDropItem(draggedItemId: "parent", onto: "child"))
+        // Nil dragged item
+        XCTAssertFalse(itemStore.canDropItem(draggedItemId: nil, onto: "parent"))
+        // Non-existent dragged item
+        XCTAssertFalse(itemStore.canDropItem(draggedItemId: "nonexistent", onto: "parent"))
+        // Non-existent target
+        XCTAssertFalse(itemStore.canDropItem(draggedItemId: "child", onto: "nonexistent"))
+    }
+
+    func testMoveItemSortOrderAssignment() throws {
+        // Given - Target with existing children
+        let target = Item(id: "target", title: "Target", itemType: .project, sortOrder: 0)
+        let existingChild1 = Item(id: "child1", title: "Child 1", itemType: .task, parentId: "target", sortOrder: 0)
+        let existingChild2 = Item(id: "child2", title: "Child 2", itemType: .task, parentId: "target", sortOrder: 1)
+        let newItem = Item(id: "new", title: "New", itemType: .task, sortOrder: 1)
+        try repository.create(target)
+        try repository.create(existingChild1)
+        try repository.create(existingChild2)
+        try repository.create(newItem)
+        itemStore.loadItems()
+
+        // When - Move new item into target
+        itemStore.moveItem(draggedItemId: "new", targetItemId: "target")
+
+        // Then - New item should get sortOrder 2 (max + 1)
+        let movedItem = itemStore.items.first(where: { $0.id == "new" })
+        XCTAssertEqual(movedItem?.parentId, "target")
+        XCTAssertEqual(movedItem?.sortOrder, 2)
+    }
 }

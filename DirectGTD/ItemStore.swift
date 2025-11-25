@@ -15,6 +15,7 @@ class ItemStore: ObservableObject {
     @Published private(set) var tags: [Tag] = []
     @Published private(set) var itemTags: [String: [Tag]] = [:] // Cache: itemId -> tags
     @Published var filteredByTag: Tag? = nil
+    @Published var draggedItemId: String? = nil
     private let repository: ItemRepository
     let settings: UserSettings
     var undoManager: UndoManager?
@@ -248,6 +249,26 @@ class ItemStore: ObservableObject {
         }
     }
 
+    func canDropItem(draggedItemId: String?, onto targetItemId: String) -> Bool {
+        guard let draggedId = draggedItemId else { return false }
+        guard let draggedItem = items.first(where: { $0.id == draggedId }) else { return false }
+
+        // Verify target exists
+        guard items.contains(where: { $0.id == targetItemId }) else { return false }
+
+        // Prevent dropping an item into itself
+        if draggedId == targetItemId {
+            return false
+        }
+
+        // Prevent dropping a parent into its own descendant
+        if isDescendant(of: draggedItem, itemId: targetItemId) {
+            return false
+        }
+
+        return true
+    }
+
     func moveItem(draggedItemId: String, targetItemId: String) {
         guard let draggedItem = items.first(where: { $0.id == draggedItemId }) else { return }
 
@@ -263,6 +284,9 @@ class ItemStore: ObservableObject {
         if isDescendant(of: draggedItem, itemId: targetItemId) {
             return
         }
+
+        // Expand the target item so the drop result is visible
+        settings.expandedItemIds.insert(targetItemId)
 
         // Store original state for undo
         let originalParentId = draggedItem.parentId
