@@ -81,7 +81,7 @@ struct DetailView: View {
                                             store.updateEarliestStartTime(id: selectedId, earliestStartTime: Int(newDate.timeIntervalSince1970))
                                         }
                                     ),
-                                    displayedComponents: [.date]
+                                    displayedComponents: [.date, .hourAndMinute]
                                 )
                                 .labelsHidden()
 
@@ -94,11 +94,17 @@ struct DetailView: View {
                                 .buttonStyle(.plain)
                             } else {
                                 Button("Set") {
-                                    // Set to today at midnight by default
+                                    // Set to today at 9am by default
                                     let today = Date()
                                     let components = Calendar.current.dateComponents([.year, .month, .day], from: today)
-                                    let todayMidnight = Calendar.current.date(from: components) ?? today
-                                    store.updateEarliestStartTime(id: selectedId, earliestStartTime: Int(todayMidnight.timeIntervalSince1970))
+                                    let todayAt9am = Calendar.current.date(from: DateComponents(
+                                        year: components.year,
+                                        month: components.month,
+                                        day: components.day,
+                                        hour: 9,
+                                        minute: 0
+                                    )) ?? today
+                                    store.updateEarliestStartTime(id: selectedId, earliestStartTime: Int(todayAt9am.timeIntervalSince1970))
                                 }
                             }
                         }
