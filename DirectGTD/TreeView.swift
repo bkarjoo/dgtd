@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct TreeView: View {
     @ObservedObject var store: ItemStore
@@ -536,6 +537,14 @@ struct ItemRow: View {
                     store.selectedItemId = item.id
                 }
             }
+            .onDrag {
+                NSItemProvider(object: item.id as NSString)
+            }
+            .onDrop(of: [.text], delegate: ItemDropDelegate(
+                item: item,
+                allItems: allItems,
+                store: store
+            ))
 
             // Children (if expanded)
             if !children.isEmpty && isExpanded.wrappedValue {
@@ -627,6 +636,39 @@ struct QuickCaptureView: View {
         }
         .padding(24)
         .frame(width: 400, height: 150)
+    }
+}
+
+struct ItemDropDelegate: DropDelegate {
+    let item: Item
+    let allItems: [Item]
+    let store: ItemStore
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let itemProvider = info.itemProviders(for: [.text]).first else {
+            return false
+        }
+
+        itemProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { data, error in
+            guard let data = data as? Data,
+                  let draggedItemId = String(data: data, encoding: .utf8) else {
+                return
+            }
+
+            DispatchQueue.main.async {
+                store.moveItem(draggedItemId: draggedItemId, targetItemId: item.id)
+            }
+        }
+
+        return true
+    }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        // Ensure we have a dragged item
+        guard !info.itemProviders(for: [.text]).isEmpty else {
+            return false
+        }
+        return true
     }
 }
 

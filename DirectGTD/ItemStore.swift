@@ -248,6 +248,97 @@ class ItemStore: ObservableObject {
         }
     }
 
+    func moveItem(draggedItemId: String, targetItemId: String) {
+        guard let draggedItem = items.first(where: { $0.id == draggedItemId }) else { return }
+
+        // Verify target exists
+        guard items.contains(where: { $0.id == targetItemId }) else { return }
+
+        // Prevent dropping an item into itself
+        if draggedItemId == targetItemId {
+            return
+        }
+
+        // Prevent dropping a parent into its own descendant
+        if isDescendant(of: draggedItem, itemId: targetItemId) {
+            return
+        }
+
+        // Store original state for undo
+        let originalParentId = draggedItem.parentId
+        let originalSortOrder = draggedItem.sortOrder
+
+        // Update the dragged item to become a child of the target
+        var updatedItem = draggedItem
+        updatedItem.parentId = targetItemId
+
+        // Find the highest sortOrder among existing children of the target
+        let existingChildren = items.filter { $0.parentId == targetItemId }
+        let maxSortOrder = existingChildren.map { $0.sortOrder }.max() ?? -1
+        updatedItem.sortOrder = maxSortOrder + 1
+
+        do {
+            try repository.update(updatedItem)
+            loadItems()
+
+            // Register undo
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.undoMoveItem(
+                    itemId: draggedItemId,
+                    toParentId: originalParentId,
+                    sortOrder: originalSortOrder
+                )
+            }
+            undoManager?.setActionName("Move Item")
+        } catch {
+            print("Error moving item: \(error)")
+        }
+    }
+
+    private func undoMoveItem(itemId: String, toParentId: String?, sortOrder: Int) {
+        guard var item = items.first(where: { $0.id == itemId }) else { return }
+
+        let currentParentId = item.parentId
+        let currentSortOrder = item.sortOrder
+
+        item.parentId = toParentId
+        item.sortOrder = sortOrder
+
+        do {
+            try repository.update(item)
+            loadItems()
+
+            // Register redo
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.undoMoveItem(
+                    itemId: itemId,
+                    toParentId: currentParentId,
+                    sortOrder: currentSortOrder
+                )
+            }
+        } catch {
+            print("Error undoing move: \(error)")
+        }
+    }
+
+    private func isDescendant(of parent: Item, itemId: String) -> Bool {
+        if itemId == parent.id { return false }
+
+        guard let item = items.first(where: { $0.id == itemId }) else { return false }
+
+        var current = item
+        while let parentId = current.parentId {
+            if parentId == parent.id {
+                return true
+            }
+            guard let parentItem = items.first(where: { $0.id == parentId }) else {
+                break
+            }
+            current = parentItem
+        }
+        return false
+    }
+
     func createItemAfterSelected(withType itemType: ItemType = .unknown) {
         let newItem = Item(title: "", itemType: itemType)
 
