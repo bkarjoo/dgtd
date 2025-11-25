@@ -645,6 +645,31 @@ struct ItemDropDelegate: DropDelegate {
     let allItems: [Item]
     let store: ItemStore
 
+    func dropEntered(info: DropInfo) {
+        // Verify payload matches our tracked drag; clear stale state if not
+        guard let itemProvider = info.itemProviders(for: [.text]).first else {
+            store.draggedItemId = nil
+            return
+        }
+
+        itemProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { data, error in
+            guard let data = data as? Data,
+                  let payloadId = String(data: data, encoding: .utf8) else {
+                DispatchQueue.main.async {
+                    store.draggedItemId = nil
+                }
+                return
+            }
+
+            DispatchQueue.main.async {
+                // If payload doesn't match tracked ID, clear the stale state
+                if store.draggedItemId != payloadId {
+                    store.draggedItemId = nil
+                }
+            }
+        }
+    }
+
     func performDrop(info: DropInfo) -> Bool {
         defer { store.draggedItemId = nil }
 
