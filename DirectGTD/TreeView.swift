@@ -646,23 +646,20 @@ struct ItemDropDelegate: DropDelegate {
     let store: ItemStore
 
     func performDrop(info: DropInfo) -> Bool {
+        defer { store.draggedItemId = nil }
+
         guard let itemProvider = info.itemProviders(for: [.text]).first else {
-            store.draggedItemId = nil
             return false
         }
 
         itemProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { data, error in
             guard let data = data as? Data,
                   let draggedItemId = String(data: data, encoding: .utf8) else {
-                DispatchQueue.main.async {
-                    store.draggedItemId = nil
-                }
                 return
             }
 
             DispatchQueue.main.async {
                 store.moveItem(draggedItemId: draggedItemId, targetItemId: item.id)
-                store.draggedItemId = nil
             }
         }
 
@@ -677,6 +674,11 @@ struct ItemDropDelegate: DropDelegate {
 
         // Validate the drop using the store's tracked dragged item
         return store.canDropItem(draggedItemId: store.draggedItemId, onto: item.id)
+    }
+
+    func dropExited(info: DropInfo) {
+        // Clear dragged item when drag exits without dropping
+        store.draggedItemId = nil
     }
 }
 
