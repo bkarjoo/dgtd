@@ -167,21 +167,24 @@ All methods toggle between complete/incomplete.
 
 Items can have sub-items. Sub-items can have sub-sub-items. It's turtles all the way down.
 
-**To make something a child item:**
-1. Select the item
-2. Hit **Tab**
+**Keyboard (fast & precise):**
+- **Tab** - Make selected item a child of item above
+- **Shift+Tab** - Promote item back up one level
+- **→** - Expand parent item
+- **←** - Collapse parent item
 
-**To promote it back:**
-1. Hit **Shift+Tab**
+**Drag-and-Drop (visual & intuitive):**
+- **Drag any item** onto another item to make it a child
+- **Smart validation** - Prevents self-drop and circular hierarchies
+- **Auto-expand** - Dropping onto collapsed item expands it automatically
+- **Visual feedback** - See where item will land before dropping
+- **Undo support** - Cmd+Z undoes drag-and-drop moves
 
-**To expand/collapse:**
-- **→** expands the selected parent item
-- **←** collapses the selected parent item
-- Or click the chevron (► or ▼)
-
-Parent items automatically get a chevron. Everything's keyboard accessible now.
+**Pro tip:** Keyboard is faster for single moves. Drag-and-drop shines for major reorganizations where you want to visualize the new structure.
 
 *[Screenshot: Hierarchical item list with indentation and chevrons]*
+
+*[Screenshot: Drag-and-drop in action with visual feedback]*
 
 ---
 
@@ -439,12 +442,11 @@ DirectGTD follows one principle: **Get out of your way.**
 - **Tags** - Flexible, color-coded organization for GTD contexts
 - **Search** - Instant filtering to find anything
 - **Hierarchy** - Folders and projects with unlimited nesting
-- **Keyboard-first** - Every core action has a shortcut
+- **Keyboard-first** - Every core action has a shortcut (but drag-and-drop available too)
 - **Local storage** - Your data stays yours
 
 **What we deliberately don't have:**
 - No due dates (yet)
-- No drag-and-drop (keyboard is faster)
 - No right-click menus (keeps it simple)
 - No cloud sync (no synchronization anxiety)
 - No AI suggestions (you know your work best)
@@ -550,9 +552,17 @@ Questions? Found a bug? Want to contribute?
 
 ---
 
-**Version 2.1** | Made for humans who type faster than they click
+**Version 2.1** | Made for humans who type faster than they click (but can drag too)
 
 ### What's New in 2.1
+
+**🎉 Drag-and-Drop** - Visual reorganization made easy!
+- **Drag items** onto other items to make them children
+- **Smart validation** - Prevents self-drop and circular hierarchies
+- **Auto-expand** - Dropping onto collapsed items expands them
+- **Visual feedback** - Clear drop indicators
+- **Full undo/redo** - Cmd+Z works perfectly
+- **Complements keyboard** - Use what feels natural for each task
 
 **🎉 Tags** - Flexible, color-coded organization!
 - **Create custom tags** with name and color picker
