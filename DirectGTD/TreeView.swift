@@ -590,10 +590,12 @@ struct ItemRow: View {
 
             // Children (if expanded)
             if !children.isEmpty && isExpanded.wrappedValue {
-                ForEach(children, id: \.id) { child in
-                    ItemRow(item: child, allItems: allItems, store: store, settings: settings, editFieldFocused: $editFieldFocused, fontSize: fontSize, onCompletionToggled: onCompletionToggled)
-                        .id(child.id)
-                        .padding(.leading, 20)
+                VStack(alignment: .leading, spacing: settings.lineSpacing) {
+                    ForEach(children, id: \.id) { child in
+                        ItemRow(item: child, allItems: allItems, store: store, settings: settings, editFieldFocused: $editFieldFocused, fontSize: fontSize, onCompletionToggled: onCompletionToggled)
+                            .id(child.id)
+                            .padding(.leading, 20)
+                    }
                 }
             }
         }
