@@ -133,6 +133,7 @@ The app has **two panes**:
 **Right Pane (DetailView):**
 - Shows details of selected item
 - Change item type
+- Set due dates and earliest start times
 - Toggle task completion
 - Add/edit notes
 - Manage tags
@@ -242,6 +243,64 @@ Every item can have notes - perfect for task descriptions, project details, refe
 - Context and background for any item
 
 *[Screenshot: DetailView showing notes editor with content]*
+
+---
+
+## Due Dates & Start Times
+
+**Track deadlines and defer work until it's ready.**
+
+Set due dates to track when things need to be done. Set earliest start times to hide work until the right moment.
+
+**Setting Due Dates:**
+1. Select an item in the tree
+2. In DetailView → **Dates section** → **Due Date**
+3. Click **"Set"** button (defaults to tomorrow at 5pm)
+4. Adjust date and time with inline picker
+5. Click **X** to clear the due date
+
+**Setting Earliest Start Times:**
+1. Select an item in the tree
+2. In DetailView → **Dates section** → **Earliest Start**
+3. Click **"Set"** button (defaults to today at 9am)
+4. Adjust date and time with inline picker
+5. Click **X** to clear the start time
+
+**Visual Badges in Tree View:**
+
+Items with dates show **color-coded badges** for instant status recognition:
+
+- **Red badge** - Overdue (past due date)
+- **Orange badge** - Due today
+- **Blue badge** - Deferred (hasn't started yet, future start time)
+- **Text shows**: "Today", "Tomorrow", or short date (e.g., "11/26")
+
+**How Earliest Start Works:**
+
+Items with future start times show a **blue badge** in the tree. This lets you defer work until the right moment without cluttering your current view. Perfect for:
+- Tasks that can't start until a specific date ("Call client after product ships")
+- Seasonal work ("Review Q4 goals in October")
+- Time-sensitive opportunities ("Buy tickets when sales open")
+
+**Features:**
+- **Both date and time** - Precise scheduling for both fields
+- **Smart defaults** - Due dates default to tomorrow 5pm, start times to today 9am
+- **Minimal UI** - Compact inline pickers, no calendar popups
+- **Visual feedback** - Color-coded badges show status at a glance
+- **Undo/redo support** - Cmd+Z works on all date changes
+- **Works on all item types** - Not just tasks
+
+**GTD Workflow:**
+
+DirectGTD's date fields map to GTD principles:
+- **Due Date** = Hard deadline (when it MUST be done)
+- **Earliest Start** = Defer until viable (tickler file concept)
+- Use **tags** for contexts (home, work, computer)
+- Use **folders** for projects and areas of responsibility
+
+*[Screenshot: DetailView showing Dates section with both fields set]*
+
+*[Screenshot: TreeView showing red, orange, and blue date badges]*
 
 ---
 
@@ -440,6 +499,7 @@ All settings **persist across sessions**.
 - Use **Cmd+F** to find anything instantly (scales to 1000+ items)
 - **Filter by tag** - Click tag icon to see only items in a specific context (home, work, etc.)
 - **Tags for contexts** - Tag tasks with contexts (home, work, computer) for GTD workflow
+- **Date badges** - Scan for red (overdue), orange (due today), blue (deferred) at a glance
 - **Quick capture folder** keeps your inbox organized
 - Hide completed tasks (eye icon) for focused work sessions
 - Use DetailView to batch-edit item properties and manage tags
@@ -481,6 +541,7 @@ All settings **persist across sessions**.
 DirectGTD follows one principle: **Get out of your way.**
 
 **What we have:**
+- **Due dates & start times** - Track deadlines and defer work with visual badges
 - **Tags** - Flexible, color-coded organization for GTD contexts
 - **Search** - Instant filtering to find anything
 - **Hierarchy** - Folders and projects with unlimited nesting
@@ -488,11 +549,11 @@ DirectGTD follows one principle: **Get out of your way.**
 - **Local storage** - Your data stays yours
 
 **What we deliberately don't have:**
-- No due dates (yet)
 - No right-click menus (keeps it simple)
 - No cloud sync (no synchronization anxiety)
 - No AI suggestions (you know your work best)
 - No social features (this is your personal system)
+- No recurring tasks (single-instance simplicity)
 
 Fast, focused, friction-free. If you need calendars, reminders, team collaboration, or AI assistance... you probably need a different app.
 
@@ -523,6 +584,12 @@ A: Cmd+F opens search. Type a few letters and click the result. Works with hundr
 
 **Q: How do I filter by tag?**
 A: Click the tag icon in the toolbar, select a tag, and the tree view shows only items with that tag (plus their parents to preserve hierarchy). Click "Clear" to remove the filter.
+
+**Q: What's the difference between due date and earliest start time?**
+A: Due date = when it MUST be done (hard deadline). Earliest start = when you CAN start (defer until ready). GTD calls this the "tickler file" concept.
+
+**Q: Do items with future start times disappear from the tree?**
+A: No! They stay visible with a blue badge. The badge reminds you they're deferred but keeps them in context with your hierarchy.
 
 **Q: How do I check off tasks with keyboard?**
 A: Press period (.) when a task is selected. No mouse needed!
@@ -597,6 +664,16 @@ Questions? Found a bug? Want to contribute?
 **Version 2.1** | Made for humans who type faster than they click (but can drag too)
 
 ### What's New in 2.1
+
+**🎉 Due Dates & Start Times** - Track deadlines and defer work!
+- **Due dates** with date + time for hard deadlines
+- **Earliest start times** to defer work until the right moment
+- **Color-coded badges** in tree view (red = overdue, orange = due today, blue = deferred)
+- **Smart date formatting** - "Today", "Tomorrow", or short date
+- **Minimal UI** - Compact inline pickers, no calendar popups
+- **Smart defaults** - Due dates → tomorrow 5pm, start times → today 9am
+- **Undo/redo support** - Cmd+Z works on all date changes
+- **GTD-ready** - Maps to GTD principles (hard deadlines + tickler file)
 
 **🎉 Notes/Descriptions** - Rich context for every item!
 - **Multiline text editor** in DetailView for detailed notes
