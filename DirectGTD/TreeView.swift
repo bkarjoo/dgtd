@@ -572,6 +572,18 @@ struct ItemRow: View {
                 isSelected ? Color.accentColor.opacity(0.2) :
                 Color.clear
             )
+            .overlay(
+                GeometryReader { geometry in
+                    Color.clear
+                        .preference(key: ItemHeightPreferenceKey.self, value: geometry.size.height)
+                        .onAppear {
+                            rowHeight = geometry.size.height
+                        }
+                }
+            )
+            .onPreferenceChange(ItemHeightPreferenceKey.self) { height in
+                rowHeight = height
+            }
             .overlay(alignment: .top) {
                 if store.dropTargetId == item.id && store.dropTargetPosition == .above {
                     Rectangle()
@@ -601,12 +613,6 @@ struct ItemRow: View {
                     return nil
                 }
                 return provider
-            }
-            .background(GeometryReader { geometry in
-                Color.clear.preference(key: ItemHeightPreferenceKey.self, value: geometry.size.height)
-            })
-            .onPreferenceChange(ItemHeightPreferenceKey.self) { height in
-                rowHeight = height
             }
             .onDrop(of: [.directGTDItem], delegate: ItemDropDelegate(
                 item: item,
