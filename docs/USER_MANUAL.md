@@ -134,7 +134,8 @@ The app has **two panes**:
 - Shows details of selected item
 - Change item type
 - Toggle task completion
-- (More features coming)
+- Add/edit notes
+- Manage tags
 
 **Resizable divider** - Drag to adjust pane sizes.
 
@@ -211,6 +212,36 @@ When editing:
 - Empty items get auto-deleted when you cancel (we're tidy like that)
 
 *[Screenshot: Item in edit mode]*
+
+---
+
+## Notes
+
+**Add detailed notes to any item.**
+
+Every item can have notes - perfect for task descriptions, project details, reference information, or any text you need alongside the item title.
+
+**How to use:**
+1. Select an item in the tree (left pane)
+2. Look for the **Notes section** in DetailView (right pane)
+3. Click in the text editor and start typing
+4. **Auto-saves** as you type (no save button needed)
+5. Empty notes are automatically cleared
+
+**Features:**
+- **Multiline editor** - Expands as you type (min 100px, max 300px)
+- **Plain text** - Simple and fast (markdown/rich text may come later)
+- **Undo/redo support** - Cmd+Z works on note edits
+- **Works on all item types** - Tasks, notes, folders, projects, everything
+
+**Perfect for:**
+- Task descriptions and acceptance criteria
+- Project details and objectives
+- Meeting notes and event details
+- Reference information on Note items
+- Context and background for any item
+
+*[Screenshot: DetailView showing notes editor with content]*
 
 ---
 
@@ -566,6 +597,14 @@ Questions? Found a bug? Want to contribute?
 **Version 2.1** | Made for humans who type faster than they click (but can drag too)
 
 ### What's New in 2.1
+
+**🎉 Notes/Descriptions** - Rich context for every item!
+- **Multiline text editor** in DetailView for detailed notes
+- **Auto-saves** as you type (no save button)
+- **Works on all item types** - Tasks, folders, projects, everything
+- **Undo/redo support** - Cmd+Z works on note edits
+- **Perfect for**: Task descriptions, project details, meeting notes, reference info
+- **Plain text** (markdown/rich text may come later)
 
 **🎉 Drag-and-Drop** - Visual reorganization made easy!
 - **Three-zone drop detection** - Top = above, Middle = into, Bottom = below
