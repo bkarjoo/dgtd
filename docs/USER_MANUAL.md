@@ -174,13 +174,24 @@ Items can have sub-items. Sub-items can have sub-sub-items. It's turtles all the
 - **←** - Collapse parent item
 
 **Drag-and-Drop (visual & intuitive):**
-- **Drag any item** onto another item to make it a child
-- **Smart validation** - Prevents self-drop and circular hierarchies
-- **Auto-expand** - Dropping onto collapsed item expands it automatically
-- **Visual feedback** - See where item will land before dropping
-- **Undo support** - Cmd+Z undoes drag-and-drop moves
 
-**Pro tip:** Keyboard is faster for single moves. Drag-and-drop shines for major reorganizations where you want to visualize the new structure.
+**Three ways to drop:**
+- **Drop on TOP quarter** - Insert ABOVE target (as sibling before)
+- **Drop in MIDDLE half** - Insert INTO target (as child)
+- **Drop on BOTTOM quarter** - Insert BELOW target (as sibling after)
+
+**Visual feedback shows where item will land:**
+- **Blue line above** - Will insert as sibling before target
+- **Blue line below** - Will insert as sibling after target
+- **No line** - Will become child of target
+
+**Smart features:**
+- **Prevents invalid drops** - Can't drop item onto itself or create circular hierarchies
+- **Auto-expand** - Dropping INTO collapsed item expands it
+- **Preserves hierarchy** - Reordering siblings keeps same parent
+- **Full undo/redo** - Cmd+Z undoes any drag-and-drop operation
+
+**Pro tip:** Keyboard is faster for single moves (Cmd+Up/Down, Tab/Shift+Tab). Drag-and-drop shines for major reorganizations where you want to visualize the new structure.
 
 *[Screenshot: Hierarchical item list with indentation and chevrons]*
 
@@ -557,10 +568,12 @@ Questions? Found a bug? Want to contribute?
 ### What's New in 2.1
 
 **🎉 Drag-and-Drop** - Visual reorganization made easy!
-- **Drag items** onto other items to make them children
+- **Three-zone drop detection** - Top = above, Middle = into, Bottom = below
+- **Sibling reordering** - Drag to reorder items within same parent
+- **Reparenting** - Drag into items to change hierarchy
+- **Visual feedback** - Blue lines show exactly where item will land
 - **Smart validation** - Prevents self-drop and circular hierarchies
-- **Auto-expand** - Dropping onto collapsed items expands them
-- **Visual feedback** - Clear drop indicators
+- **Auto-expand** - Dropping into collapsed items expands them
 - **Full undo/redo** - Cmd+Z works perfectly
 - **Complements keyboard** - Use what feels natural for each task
 
