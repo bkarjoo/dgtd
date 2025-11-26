@@ -214,6 +214,27 @@ class ItemStore: ObservableObject {
         }
     }
 
+    func updateNotes(id: String, notes: String?) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+
+        do {
+            let oldNotes = items[index].notes
+            var item = items[index]
+            item.notes = notes
+            item.modifiedAt = Int(Date().timeIntervalSince1970)
+            try repository.update(item)
+            items[index] = item
+
+            // Register undo
+            undoManager?.registerUndo(withTarget: self) { store in
+                store.updateNotes(id: id, notes: oldNotes)
+            }
+            undoManager?.setActionName("Edit Notes")
+        } catch {
+            print("Error updating notes: \(error)")
+        }
+    }
+
     func toggleTaskCompletion(id: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
 

@@ -101,6 +101,25 @@ open class Database: DatabaseProvider {
             NSLog("Database: Migration v3 completed successfully")
         }
 
+        // Register v4 migration (add notes column)
+        migrator.registerMigration("v4") { db in
+            NSLog("Database: Running migration v4 (add notes column)")
+
+            // Check if column already exists (for databases created from updated schema.sql)
+            let columnExists = try db.columns(in: "items").contains { $0.name == "notes" }
+
+            if !columnExists {
+                try db.execute(sql: """
+                    ALTER TABLE items ADD COLUMN notes TEXT
+                """)
+                NSLog("Database: Added notes column")
+            } else {
+                NSLog("Database: notes column already exists, skipping")
+            }
+
+            NSLog("Database: Migration v4 completed successfully")
+        }
+
         // Handle backward compatibility: Detect legacy databases and reset them
         try queue.write { db in
             // State Detection Step 1: Check if grdb_migrations table exists

@@ -39,6 +39,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
     var id: String
     var title: String?
     var itemType: ItemType
+    var notes: String?
 
     // Hierarchy
     var parentId: String?
@@ -59,6 +60,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
         static let id = Column(CodingKeys.id)
         static let title = Column(CodingKeys.title)
         static let itemType = Column(CodingKeys.itemType)
+        static let notes = Column(CodingKeys.notes)
         static let parentId = Column(CodingKeys.parentId)
         static let sortOrder = Column(CodingKeys.sortOrder)
         static let createdAt = Column(CodingKeys.createdAt)
@@ -73,6 +75,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
         case id
         case title
         case itemType = "item_type"
+        case notes
         case parentId = "parent_id"
         case sortOrder = "sort_order"
         case createdAt = "created_at"
@@ -87,6 +90,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
         id: String = UUID().uuidString,
         title: String? = nil,
         itemType: ItemType = .unknown,
+        notes: String? = nil,
         parentId: String? = nil,
         sortOrder: Int = 0,
         createdAt: Int = Int(Date().timeIntervalSince1970),
@@ -98,6 +102,7 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
         self.id = id
         self.title = title
         self.itemType = itemType
+        self.notes = notes
         self.parentId = parentId
         self.sortOrder = sortOrder
         self.createdAt = createdAt

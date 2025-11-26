@@ -2,8 +2,8 @@
 
 ## Features to Add
 
-- [ ] Add note/description field to items
-  - Add `notes` TEXT field to database schema
-  - Update Item model to include notes property
-  - Add text editor in DetailView for editing notes
-  - Support rich text or markdown formatting
+- [x] Add note/description field to items
+  - Added `notes` TEXT field to database schema
+  - Updated Item model to include notes property
+  - Added text editor in DetailView for editing notes
+  - Plain text support (markdown/rich text can be added later if needed)

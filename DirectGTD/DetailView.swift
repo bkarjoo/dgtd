@@ -131,6 +131,17 @@ struct DetailView: View {
                         .frame(minHeight: 32)
                     }
 
+                    Section("Notes") {
+                        TextEditor(text: Binding(
+                            get: { selectedItem.notes ?? "" },
+                            set: { newValue in
+                                store.updateNotes(id: selectedId, notes: newValue.isEmpty ? nil : newValue)
+                            }
+                        ))
+                        .font(.body)
+                        .frame(minHeight: 100, maxHeight: 300)
+                    }
+
                     if selectedItem.itemType == .task {
                         Section {
                             Toggle("Completed", isOn: Binding(

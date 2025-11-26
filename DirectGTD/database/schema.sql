@@ -5,6 +5,7 @@ CREATE TABLE items (
     id TEXT PRIMARY KEY,
     title TEXT,
     item_type TEXT DEFAULT 'Unknown',
+    notes TEXT,
 
     -- Hierarchy
     parent_id TEXT,
