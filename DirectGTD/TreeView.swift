@@ -567,9 +567,10 @@ struct ItemRow: View {
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                store.dropTargetId == item.id && store.dropTargetPosition == .into
-                    ? Color.accentColor.opacity(0.15)
-                    : (isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
+                // Drop target takes precedence during drag operations
+                (store.dropTargetId == item.id && store.dropTargetPosition == .into) ? Color.accentColor.opacity(0.25) :
+                isSelected ? Color.accentColor.opacity(0.2) :
+                Color.clear
             )
             .overlay(alignment: .top) {
                 if store.dropTargetId == item.id && store.dropTargetPosition == .above {
@@ -730,19 +731,23 @@ struct ItemDropDelegate: DropDelegate {
     let rowHeight: CGFloat
 
     func performDrop(info: DropInfo) -> Bool {
-        defer {
+        guard let itemProvider = info.itemProviders(for: [.directGTDItem]).first else {
+            // Clear drop indicators on failure
             store.draggedItemId = nil
             store.dropTargetId = nil
             store.dropTargetPosition = nil
-        }
-
-        guard let itemProvider = info.itemProviders(for: [.directGTDItem]).first else {
             return false
         }
 
         itemProvider.loadDataRepresentation(forTypeIdentifier: UTType.directGTDItem.identifier) { data, error in
             guard let data = data,
                   let draggedItemId = String(data: data, encoding: .utf8) else {
+                // Clear drop indicators on decode failure
+                DispatchQueue.main.async {
+                    store.draggedItemId = nil
+                    store.dropTargetId = nil
+                    store.dropTargetPosition = nil
+                }
                 return
             }
 
@@ -750,6 +755,11 @@ struct ItemDropDelegate: DropDelegate {
                 let position = getDropPosition(info: info)
                 store.moveItem(draggedItemId: draggedItemId, targetItemId: item.id, position: position)
                 store.selectedItemId = draggedItemId
+
+                // Clear drop indicators after move completes
+                store.draggedItemId = nil
+                store.dropTargetId = nil
+                store.dropTargetPosition = nil
             }
         }
 

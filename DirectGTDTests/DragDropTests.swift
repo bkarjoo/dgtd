@@ -150,6 +150,92 @@ final class DragDropTests: XCTestCase {
         XCTAssertTrue(canDrop)
     }
 
+    func testCanDropItemAboveReturnsTrueForValidSiblingReorder() throws {
+        // Given: Two sibling items
+        let parent = Item(id: "parent", title: "Parent", itemType: .project)
+        var child1 = Item(id: "child1", title: "Child 1", itemType: .task)
+        child1.parentId = "parent"
+        var child2 = Item(id: "child2", title: "Child 2", itemType: .task)
+        child2.parentId = "parent"
+
+        try repository.create(parent)
+        try repository.create(child1)
+        try repository.create(child2)
+        itemStore.loadItems()
+
+        // When: Checking if child2 can be dropped above child1
+        let canDrop = itemStore.canDropItem(draggedItemId: child2.id, onto: child1.id, position: .above)
+
+        // Then: Returns true
+        XCTAssertTrue(canDrop)
+    }
+
+    func testCanDropItemBelowReturnsTrueForValidSiblingReorder() throws {
+        // Given: Two sibling items
+        let parent = Item(id: "parent", title: "Parent", itemType: .project)
+        var child1 = Item(id: "child1", title: "Child 1", itemType: .task)
+        child1.parentId = "parent"
+        var child2 = Item(id: "child2", title: "Child 2", itemType: .task)
+        child2.parentId = "parent"
+
+        try repository.create(parent)
+        try repository.create(child1)
+        try repository.create(child2)
+        itemStore.loadItems()
+
+        // When: Checking if child1 can be dropped below child2
+        let canDrop = itemStore.canDropItem(draggedItemId: child1.id, onto: child2.id, position: .below)
+
+        // Then: Returns true
+        XCTAssertTrue(canDrop)
+    }
+
+    func testCanDropItemAboveValidatesTargetParentIsNotDescendant() throws {
+        // Given: Grandparent > Parent > Child hierarchy
+        let grandparent = Item(id: "grandparent", title: "Grandparent", itemType: .project)
+        var parent = Item(id: "parent", title: "Parent", itemType: .project)
+        parent.parentId = "grandparent"
+        var child = Item(id: "child", title: "Child", itemType: .task)
+        child.parentId = "parent"
+        var sibling = Item(id: "sibling", title: "Sibling", itemType: .task)
+        sibling.parentId = "parent"
+
+        try repository.create(grandparent)
+        try repository.create(parent)
+        try repository.create(child)
+        try repository.create(sibling)
+        itemStore.loadItems()
+
+        // When: Checking if grandparent can be dropped above sibling (would make grandparent's parent = parent)
+        let canDrop = itemStore.canDropItem(draggedItemId: grandparent.id, onto: sibling.id, position: .above)
+
+        // Then: Returns false (prevents circular hierarchy - grandparent can't become child of its descendant)
+        XCTAssertFalse(canDrop)
+    }
+
+    func testCanDropItemBelowValidatesTargetParentIsNotDescendant() throws {
+        // Given: Grandparent > Parent > Child hierarchy
+        let grandparent = Item(id: "grandparent", title: "Grandparent", itemType: .project)
+        var parent = Item(id: "parent", title: "Parent", itemType: .project)
+        parent.parentId = "grandparent"
+        var child = Item(id: "child", title: "Child", itemType: .task)
+        child.parentId = "parent"
+        var sibling = Item(id: "sibling", title: "Sibling", itemType: .task)
+        sibling.parentId = "parent"
+
+        try repository.create(grandparent)
+        try repository.create(parent)
+        try repository.create(child)
+        try repository.create(sibling)
+        itemStore.loadItems()
+
+        // When: Checking if grandparent can be dropped below sibling (would make grandparent's parent = parent)
+        let canDrop = itemStore.canDropItem(draggedItemId: grandparent.id, onto: sibling.id, position: .below)
+
+        // Then: Returns false (prevents circular hierarchy - grandparent can't become child of its descendant)
+        XCTAssertFalse(canDrop)
+    }
+
     // MARK: - moveItem Tests
 
     func testMoveItemSuccessfullyMovesItemToNewParent() throws {
@@ -277,11 +363,16 @@ final class DragDropTests: XCTestCase {
         try repository.create(target)
         itemStore.loadItems()
 
-        // When: Attempting to move non-existent item (should not crash)
+        let initialCount = itemStore.items.count
+
+        // When: Attempting to move non-existent item
         itemStore.moveItem(draggedItemId: "nonexistent", targetItemId: target.id, position: .into)
 
-        // Then: No changes occur (test completes without crash)
-        XCTAssertTrue(true)
+        // Then: No changes occur (items count unchanged, target unchanged)
+        XCTAssertEqual(itemStore.items.count, initialCount)
+        let unchangedTarget = itemStore.items.first(where: { $0.id == target.id })
+        XCTAssertNotNil(unchangedTarget)
+        XCTAssertEqual(unchangedTarget?.title, target.title)
     }
 
     func testMoveItemReturnsEarlyWhenTargetDoesNotExist() throws {
@@ -421,8 +512,9 @@ final class DragDropTests: XCTestCase {
 
         // Then: child1 now has same parent as child2
         let movedItem = itemStore.items.first(where: { $0.id == "child1" })
+        let updatedChild2 = itemStore.items.first(where: { $0.id == "child2" })
         XCTAssertEqual(movedItem?.parentId, "parent2")
-        XCTAssertLessThan(movedItem!.sortOrder, child2.sortOrder)
+        XCTAssertLessThan(movedItem!.sortOrder, updatedChild2!.sortOrder)
     }
 
     func testMoveItemAboveAtBeginning() throws {
@@ -440,8 +532,9 @@ final class DragDropTests: XCTestCase {
 
         // Then: child2 has sortOrder less than child1
         let movedItem = itemStore.items.first(where: { $0.id == "child2" })
+        let updatedChild1 = itemStore.items.first(where: { $0.id == "child1" })
         XCTAssertEqual(movedItem?.parentId, "parent")
-        XCTAssertLessThan(movedItem!.sortOrder, child1.sortOrder)
+        XCTAssertLessThan(movedItem!.sortOrder, updatedChild1!.sortOrder)
     }
 
     func testMoveItemBelowAtEnd() throws {
@@ -459,7 +552,8 @@ final class DragDropTests: XCTestCase {
 
         // Then: child1 has sortOrder greater than child2
         let movedItem = itemStore.items.first(where: { $0.id == "child1" })
+        let updatedChild2 = itemStore.items.first(where: { $0.id == "child2" })
         XCTAssertEqual(movedItem?.parentId, "parent")
-        XCTAssertGreaterThan(movedItem!.sortOrder, child2.sortOrder)
+        XCTAssertGreaterThan(movedItem!.sortOrder, updatedChild2!.sortOrder)
     }
 }
