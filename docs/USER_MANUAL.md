@@ -182,8 +182,8 @@ Items can have sub-items. Sub-items can have sub-sub-items. It's turtles all the
 
 **Visual feedback shows where item will land:**
 - **Blue line above** - Will insert as sibling before target
+- **Highlighted background** - Will become child of target (drop INTO)
 - **Blue line below** - Will insert as sibling after target
-- **No line** - Will become child of target
 
 **Smart features:**
 - **Prevents invalid drops** - Can't drop item onto itself or create circular hierarchies
