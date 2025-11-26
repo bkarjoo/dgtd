@@ -368,43 +368,63 @@ class ItemStore: ObservableObject {
             // Insert as sibling - same parent as target
             updatedItem.parentId = targetItem.parentId
 
-            // Get all siblings (items with same parent as target)
-            let siblings = items.filter { $0.parentId == targetItem.parentId && $0.id != draggedItemId }
+            // Get all siblings (items with same parent as target, excluding dragged item)
+            var siblings = items.filter { $0.parentId == targetItem.parentId && $0.id != draggedItemId }
                 .sorted { $0.sortOrder < $1.sortOrder }
 
             // Find target's position in sibling list
             guard let targetIndex = siblings.firstIndex(where: { $0.id == targetItemId }) else { return }
 
-            // Calculate new sort order
-            if position == .above {
-                // Insert before target
-                if targetIndex == 0 {
-                    // Insert at beginning
-                    updatedItem.sortOrder = (siblings.first?.sortOrder ?? 0) - 1
-                } else {
-                    // Insert between previous and target
-                    let prevSortOrder = siblings[targetIndex - 1].sortOrder
-                    let targetSortOrder = siblings[targetIndex].sortOrder
-                    updatedItem.sortOrder = (prevSortOrder + targetSortOrder) / 2
+            // Determine insertion point
+            let insertionIndex = position == .above ? targetIndex : targetIndex + 1
+
+            // Check if we have room to insert (need gap of at least 2 for integer division)
+            var needsRenumbering = false
+            if insertionIndex == 0 {
+                // Inserting at beginning - check if we have room below first item
+                if siblings.first!.sortOrder <= 0 {
+                    needsRenumbering = true
                 }
-            } else { // .below
-                // Insert after target
-                if targetIndex == siblings.count - 1 {
-                    // Insert at end
-                    updatedItem.sortOrder = (siblings.last?.sortOrder ?? 0) + 1
-                } else {
-                    // Insert between target and next
-                    let targetSortOrder = siblings[targetIndex].sortOrder
-                    let nextSortOrder = siblings[targetIndex + 1].sortOrder
-                    updatedItem.sortOrder = (targetSortOrder + nextSortOrder) / 2
+            } else if insertionIndex >= siblings.count {
+                // Inserting at end - always have room
+                needsRenumbering = false
+            } else {
+                // Inserting between two items - check if gap is large enough
+                let prevSortOrder = siblings[insertionIndex - 1].sortOrder
+                let nextSortOrder = siblings[insertionIndex].sortOrder
+                if nextSortOrder - prevSortOrder < 2 {
+                    needsRenumbering = true
                 }
             }
 
-            // If parent is expanded, keep it that way
-            if let parentId = updatedItem.parentId {
-                if settings.expandedItemIds.contains(parentId) {
-                    // Parent already expanded, no change needed
+            if needsRenumbering {
+                // Renumber all siblings to create space
+                // Use spacing of 1000 to allow many future insertions
+                for (index, sibling) in siblings.enumerated() {
+                    var updatedSibling = sibling
+                    updatedSibling.sortOrder = index * 1000
+                    do {
+                        try repository.update(updatedSibling)
+                    } catch {
+                        print("Error renumbering sibling: \(error)")
+                        return
+                    }
                 }
+                // Reload siblings with new sort orders
+                loadItems()
+                siblings = items.filter { $0.parentId == targetItem.parentId && $0.id != draggedItemId }
+                    .sorted { $0.sortOrder < $1.sortOrder }
+            }
+
+            // Calculate new sort order with guaranteed space
+            if insertionIndex == 0 {
+                updatedItem.sortOrder = siblings.first!.sortOrder - 1
+            } else if insertionIndex >= siblings.count {
+                updatedItem.sortOrder = siblings.last!.sortOrder + 1
+            } else {
+                let prevSortOrder = siblings[insertionIndex - 1].sortOrder
+                let nextSortOrder = siblings[insertionIndex].sortOrder
+                updatedItem.sortOrder = (prevSortOrder + nextSortOrder) / 2
             }
         }
 

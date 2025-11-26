@@ -596,10 +596,17 @@ struct ItemRow: View {
                 }
                 return provider
             }
+            .background(GeometryReader { geometry in
+                Color.clear.preference(key: ItemHeightPreferenceKey.self, value: geometry.size.height)
+            })
+            .onPreferenceChange(ItemHeightPreferenceKey.self) { height in
+                // Store height for drop calculations
+            }
             .onDrop(of: [.directGTDItem], delegate: ItemDropDelegate(
                 item: item,
                 allItems: allItems,
-                store: store
+                store: store,
+                rowHeight: fontSize * 2.5 // Approximate row height based on font size
             ))
 
             // Children (if expanded)
@@ -704,10 +711,18 @@ struct QuickCaptureView: View {
     }
 }
 
+struct ItemHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct ItemDropDelegate: DropDelegate {
     let item: Item
     let allItems: [Item]
     let store: ItemStore
+    let rowHeight: CGFloat
 
     func performDrop(info: DropInfo) -> Bool {
         defer {
@@ -764,14 +779,11 @@ struct ItemDropDelegate: DropDelegate {
 
     private func getDropPosition(info: DropInfo) -> DropPosition {
         // Divide the item into three zones: top 25%, middle 50%, bottom 25%
-        let location = info.location.y
+        let y = info.location.y
 
-        // We need the bounds from the view, but we can approximate based on font size
-        // Typical row height is around 28-32 pixels
-        let estimatedRowHeight: CGFloat = 30
-
-        // Calculate relative position (0-1)
-        let relativeY = location.truncatingRemainder(dividingBy: estimatedRowHeight) / estimatedRowHeight
+        // Calculate relative position within the row (0-1)
+        // DropInfo.location gives us coordinates within the drop target view
+        let relativeY = y / rowHeight
 
         if relativeY < 0.25 {
             return .above
