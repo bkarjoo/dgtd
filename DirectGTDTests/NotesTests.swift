@@ -55,21 +55,31 @@ final class NotesTests: XCTestCase {
     }
 
     func testUpdateNotesUpdatesModifiedAtTimestamp() throws {
-        // Given: An item
-        let item = Item(id: "item1", title: "Test Item", itemType: .task)
+        // Given: An item with a known initial timestamp
+        var item = Item(id: "item1", title: "Test Item", itemType: .task)
+        let initialTimestamp = 1000
+        item.modifiedAt = initialTimestamp
         try repository.create(item)
         itemStore.loadItems()
 
-        let originalModifiedAt = itemStore.items.first(where: { $0.id == item.id })!.modifiedAt
+        // Capture the timestamp from repository before update
+        let originalItem = try repository.getItem(id: item.id)
+        let originalModifiedAt = originalItem!.modifiedAt
 
         // When: Updating notes
         itemStore.updateNotes(id: item.id, notes: "Updated notes")
 
-        // Then: modifiedAt timestamp is updated (>= original since repository.update sets it)
-        let updatedItem = itemStore.items.first(where: { $0.id == item.id })
-        XCTAssertGreaterThanOrEqual(updatedItem!.modifiedAt, originalModifiedAt)
-        // Also verify the timestamp is reasonable (not zero/nil)
-        XCTAssertGreaterThan(updatedItem!.modifiedAt, 0)
+        // Then: modifiedAt timestamp is updated in repository
+        // repository.update always sets current timestamp, so it must be > initial
+        let updatedItemFromRepo = try repository.getItem(id: item.id)
+        XCTAssertNotNil(updatedItemFromRepo)
+        XCTAssertGreaterThan(updatedItemFromRepo!.modifiedAt, originalModifiedAt,
+                            "Repository timestamp must increase (repository.update sets current time)")
+
+        // Verify in-memory item also reflects the update
+        let updatedItemFromStore = itemStore.items.first(where: { $0.id == item.id })
+        XCTAssertNotNil(updatedItemFromStore)
+        XCTAssertGreaterThan(updatedItemFromStore!.modifiedAt, 0)
     }
 
     func testUpdateNotesFromNilToText() throws {
