@@ -160,6 +160,7 @@ class TestDatabaseWrapper: DatabaseProvider {
                     completed_at INTEGER,
                     due_date INTEGER,
                     earliest_start_time INTEGER,
+                    notes TEXT,
                     FOREIGN KEY (parent_id) REFERENCES items(id) ON DELETE CASCADE
                 )
             """)

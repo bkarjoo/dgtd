@@ -223,7 +223,7 @@ class ItemStore: ObservableObject {
             item.notes = notes
             item.modifiedAt = Int(Date().timeIntervalSince1970)
             try repository.update(item)
-            items[index] = item
+            loadItems()
 
             // Register undo
             undoManager?.registerUndo(withTarget: self) { store in

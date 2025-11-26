@@ -34,7 +34,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		1EA486AA2EC443DF0017F6CB /* Exceptions */ = {
+		1EA486AA2EC443DF0017F6CB /* Exceptions for "DirectGTD" folder in "DirectGTD" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -47,7 +47,7 @@
 		1EA486732EC43FAA0017F6CA /* DirectGTD */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				1EA486AA2EC443DF0017F6CB /* Exceptions */,
+				1EA486AA2EC443DF0017F6CB /* Exceptions for "DirectGTD" folder in "DirectGTD" target */,
 			);
 			path = DirectGTD;
 			sourceTree = "<group>";
