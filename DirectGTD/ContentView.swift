@@ -7,6 +7,11 @@
 
 import SwiftUI
 
+enum RightPaneView {
+    case detail
+    case noteEditor
+}
+
 struct ContentView: View {
     @StateObject private var settings = UserSettings()
     @StateObject private var store: ItemStore
@@ -14,6 +19,7 @@ struct ContentView: View {
     @State private var newItemName = ""
     @State private var showingSettings = false
     @State private var showingTagFilter = false
+    @State private var rightPaneView: RightPaneView = .detail
     @Environment(\.undoManager) var undoManager
 
     init() {
@@ -48,6 +54,15 @@ struct ContentView: View {
                     TagFilterPickerView(store: store, onDismiss: { showingTagFilter = false })
                 }
 
+                Button(action: {
+                    rightPaneView = rightPaneView == .detail ? .noteEditor : .detail
+                }) {
+                    Image(systemName: rightPaneView == .noteEditor ? "doc.text.fill" : "doc.text")
+                        .foregroundColor(rightPaneView == .noteEditor ? .accentColor : .primary)
+                }
+                .buttonStyle(.plain)
+                .padding()
+
                 Button(action: { undoManager?.undo() }) {
                     Image(systemName: "arrow.uturn.backward")
                 }
@@ -81,8 +96,16 @@ struct ContentView: View {
                         .frame(minWidth: 200, idealWidth: 300, maxWidth: .infinity)
                 }
 
-                DetailView(store: store)
+                if rightPaneView == .detail {
+                    DetailView(store: store)
+                        .frame(minWidth: 300, idealWidth: 500, maxWidth: .infinity)
+                } else {
+                    NoteEditorView(store: store, showDetailView: Binding(
+                        get: { rightPaneView == .detail },
+                        set: { if $0 { rightPaneView = .detail } }
+                    ))
                     .frame(minWidth: 300, idealWidth: 500, maxWidth: .infinity)
+                }
             }
         }
         .alert("New Item", isPresented: $showingAddItem) {

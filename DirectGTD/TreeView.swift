@@ -276,24 +276,10 @@ struct TreeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func shouldShowItem(_ item: Item) -> Bool {
-        // Filter by tag if active (takes precedence over completed check)
-        if store.filteredByTag != nil {
-            return store.matchesTagFilter(item)
-        }
-
-        // Hide completed tasks if showCompletedTasks is false
-        if !settings.showCompletedTasks && item.itemType == .task && item.completedAt != nil {
-            return false
-        }
-
-        return true
-    }
-
     private var rootItems: [Item] {
         store.items
             .filter { $0.parentId == nil }
-            .filter { shouldShowItem($0) }
+            .filter { store.shouldShowItem($0) }
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
@@ -305,7 +291,7 @@ struct TreeView: View {
                 result.append(item)
                 let children = store.items
                     .filter { $0.parentId == item.id }
-                    .filter { shouldShowItem($0) }
+                    .filter { store.shouldShowItem($0) }
                     .sorted { $0.sortOrder < $1.sortOrder }
                 if !children.isEmpty && store.settings.expandedItemIds.contains(item.id) {
                     collectItems(children)
@@ -362,7 +348,7 @@ struct TreeView: View {
             // Look backwards for visible sibling
             for i in stride(from: currentIndex - 1, through: 0, by: -1) {
                 let sibling = siblings[i]
-                if shouldShowItem(sibling) {
+                if store.shouldShowItem(sibling) {
                     store.selectedItemId = sibling.id
                     return
                 }
@@ -371,7 +357,7 @@ struct TreeView: View {
             // 2. Try next sibling with status not complete
             for i in (currentIndex + 1)..<siblings.count {
                 let sibling = siblings[i]
-                if shouldShowItem(sibling) {
+                if store.shouldShowItem(sibling) {
                     store.selectedItemId = sibling.id
                     return
                 }
@@ -382,7 +368,7 @@ struct TreeView: View {
         var parentId = currentItem.parentId
         while let pid = parentId {
             if let parent = store.items.first(where: { $0.id == pid }) {
-                if shouldShowItem(parent) {
+                if store.shouldShowItem(parent) {
                     store.selectedItemId = parent.id
                     return
                 }

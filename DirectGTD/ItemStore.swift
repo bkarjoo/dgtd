@@ -758,15 +758,29 @@ class ItemStore: ObservableObject {
 
             loadItems()
 
-            // Select previous item, or next item, or nil
+            // Select previous visible item, or next visible item, or nil
             let newOrderedItems = getAllItemsInOrder()
-            if currentIndex > 0 && currentIndex - 1 < newOrderedItems.count {
-                selectedItemId = newOrderedItems[currentIndex - 1].id
-            } else if !newOrderedItems.isEmpty {
-                selectedItemId = newOrderedItems[0].id
-            } else {
-                selectedItemId = nil
+
+            // Try to find a visible item going backwards from the deleted position
+            var newSelection: String? = nil
+            for i in stride(from: currentIndex - 1, through: 0, by: -1) {
+                if i < newOrderedItems.count && isItemVisible(itemId: newOrderedItems[i].id) {
+                    newSelection = newOrderedItems[i].id
+                    break
+                }
             }
+
+            // If no visible item found backwards, try forwards
+            if newSelection == nil {
+                for i in currentIndex..<newOrderedItems.count {
+                    if isItemVisible(itemId: newOrderedItems[i].id) {
+                        newSelection = newOrderedItems[i].id
+                        break
+                    }
+                }
+            }
+
+            selectedItemId = newSelection
         } catch {
             print("Error deleting item: \(error)")
         }
@@ -788,6 +802,36 @@ class ItemStore: ObservableObject {
 
         collectItems(rootItems)
         return result
+    }
+
+    func shouldShowItem(_ item: Item) -> Bool {
+        // Filter by tag if active (takes precedence over completed check)
+        if filteredByTag != nil {
+            return matchesTagFilter(item)
+        }
+
+        // Hide completed tasks if showCompletedTasks is false
+        if !settings.showCompletedTasks && item.itemType == .task && item.completedAt != nil {
+            return false
+        }
+
+        return true
+    }
+
+    private func isItemVisible(itemId: String) -> Bool {
+        guard let item = items.first(where: { $0.id == itemId }) else { return false }
+
+        // Check if item passes filter/visibility rules
+        guard shouldShowItem(item) else { return false }
+
+        // Root items are visible if they pass shouldShowItem
+        guard let parentId = item.parentId else { return true }
+
+        // Check if parent is expanded
+        guard settings.expandedItemIds.contains(parentId) else { return false }
+
+        // Recursively check if parent is visible
+        return isItemVisible(itemId: parentId)
     }
 
     private func collectSubtree(itemId: String) -> [Item] {

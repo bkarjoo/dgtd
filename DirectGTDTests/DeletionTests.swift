@@ -265,8 +265,32 @@ final class DeletionTests: XCTestCase {
 
     // MARK: - Deletion with Hierarchical Items
 
-    // TODO: Add test for single-level hidden predecessor (item → hidden child → collapsed parent)
-    // Requires investigation into why this scenario doesn't work as expected with current test setup
+    func testDeleteItemSkipsHiddenChildOfCollapsedParent() throws {
+        // Given: Single-level collapsed hierarchy followed by root item
+        // Simplified version of testDeleteItemSkipsNestedCollapsedAncestors with one level
+        // Structure: proj1 (visible root, collapsed) → task1 (hidden), then task2 (visible root)
+        let proj1 = Item(id: "proj1_unique", title: "Project 1", itemType: .project, sortOrder: 0)
+        let task1 = Item(id: "task1_unique", title: "Task 1", itemType: .task, parentId: "proj1_unique", sortOrder: 0)
+        let task2 = Item(id: "task2_unique", title: "Task 2", itemType: .task, sortOrder: 1)
+
+        try repository.create(proj1)
+        try repository.create(task1)
+        try repository.create(task2)
+        itemStore.loadItems()
+
+        // Leave proj1 collapsed (task1 is hidden)
+        XCTAssertFalse(settings.expandedItemIds.contains("proj1_unique"))
+
+        // When: Deleting task2
+        itemStore.selectedItemId = "task2_unique"
+        itemStore.deleteSelectedItem()
+
+        // Then: Should skip hidden task1 and select proj1
+        // This tests single-level isItemVisible check (ItemStore.swift:830-831)
+        XCTAssertEqual(itemStore.selectedItemId, "proj1_unique",
+                      "Should skip hidden child of collapsed parent")
+        XCTAssertNil(itemStore.items.first(where: { $0.id == "task2_unique" }))
+    }
 
     func testDeleteItemSkipsNestedCollapsedAncestors() throws {
         // Given: Nested hierarchy with collapsed grandparent
