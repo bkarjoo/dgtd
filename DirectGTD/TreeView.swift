@@ -412,6 +412,7 @@ struct ItemRow: View {
     let fontSize: CGFloat
     let onCompletionToggled: () -> Void
     @State private var editText: String = ""
+    @State private var rowHeight: CGFloat = 0
 
     private var isExpanded: Binding<Bool> {
         Binding(
@@ -600,13 +601,13 @@ struct ItemRow: View {
                 Color.clear.preference(key: ItemHeightPreferenceKey.self, value: geometry.size.height)
             })
             .onPreferenceChange(ItemHeightPreferenceKey.self) { height in
-                // Store height for drop calculations
+                rowHeight = height
             }
             .onDrop(of: [.directGTDItem], delegate: ItemDropDelegate(
                 item: item,
                 allItems: allItems,
                 store: store,
-                rowHeight: fontSize * 2.5 // Approximate row height based on font size
+                rowHeight: rowHeight > 0 ? rowHeight : fontSize * 2.5 // Use measured height, fallback to estimate
             ))
 
             // Children (if expanded)
