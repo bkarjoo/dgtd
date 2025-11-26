@@ -315,7 +315,7 @@ final class ItemStoreTests: XCTestCase {
         itemStore.loadItems()
 
         // When - Move item2 into item1
-        itemStore.moveItem(draggedItemId: "item2", targetItemId: "item1")
+        itemStore.moveItem(draggedItemId: "item2", targetItemId: "item1", position: .into)
 
         // Then - item2 should be child of item1
         let movedItem = itemStore.items.first(where: { $0.id == "item2" })
@@ -330,7 +330,7 @@ final class ItemStoreTests: XCTestCase {
         itemStore.loadItems()
 
         // When - Try to move item into itself
-        itemStore.moveItem(draggedItemId: "item1", targetItemId: "item1")
+        itemStore.moveItem(draggedItemId: "item1", targetItemId: "item1", position: .into)
 
         // Then - Item should remain unchanged
         let unchangedItem = itemStore.items.first(where: { $0.id == "item1" })
@@ -347,7 +347,7 @@ final class ItemStoreTests: XCTestCase {
         itemStore.loadItems()
 
         // When - Try to move parent into its own child
-        itemStore.moveItem(draggedItemId: "parent", targetItemId: "child")
+        itemStore.moveItem(draggedItemId: "parent", targetItemId: "child", position: .into)
 
         // Then - Parent should remain unchanged
         let unchangedParent = itemStore.items.first(where: { $0.id == "parent" })
@@ -364,7 +364,7 @@ final class ItemStoreTests: XCTestCase {
         settings.expandedItemIds.remove("target")
 
         // When - Move item into target
-        itemStore.moveItem(draggedItemId: "item", targetItemId: "target")
+        itemStore.moveItem(draggedItemId: "item", targetItemId: "target", position: .into)
 
         // Then - Target should be expanded
         XCTAssertTrue(settings.expandedItemIds.contains("target"))
@@ -381,7 +381,7 @@ final class ItemStoreTests: XCTestCase {
         itemStore.undoManager = undoManager
 
         // When - Move item2 into item1
-        itemStore.moveItem(draggedItemId: "item2", targetItemId: "item1")
+        itemStore.moveItem(draggedItemId: "item2", targetItemId: "item1", position: .into)
         XCTAssertTrue(undoManager.canUndo)
 
         // Then - Undo should restore original state
@@ -408,8 +408,8 @@ final class ItemStoreTests: XCTestCase {
         itemStore.loadItems()
 
         // Then - Valid drops should return true
-        XCTAssertTrue(itemStore.canDropItem(draggedItemId: "child1", onto: "child2"))
-        XCTAssertTrue(itemStore.canDropItem(draggedItemId: "child2", onto: "child1"))
+        XCTAssertTrue(itemStore.canDropItem(draggedItemId: "child1", onto: "child2", position: .into))
+        XCTAssertTrue(itemStore.canDropItem(draggedItemId: "child2", onto: "child1", position: .into))
     }
 
     func testCanDropItemInvalidCases() throws {
@@ -422,15 +422,15 @@ final class ItemStoreTests: XCTestCase {
 
         // Then - Invalid drops should return false
         // Self-drop
-        XCTAssertFalse(itemStore.canDropItem(draggedItemId: "parent", onto: "parent"))
+        XCTAssertFalse(itemStore.canDropItem(draggedItemId: "parent", onto: "parent", position: .into))
         // Parent into descendant
-        XCTAssertFalse(itemStore.canDropItem(draggedItemId: "parent", onto: "child"))
+        XCTAssertFalse(itemStore.canDropItem(draggedItemId: "parent", onto: "child", position: .into))
         // Nil dragged item
-        XCTAssertFalse(itemStore.canDropItem(draggedItemId: nil, onto: "parent"))
+        XCTAssertFalse(itemStore.canDropItem(draggedItemId: nil, onto: "parent", position: .into))
         // Non-existent dragged item
-        XCTAssertFalse(itemStore.canDropItem(draggedItemId: "nonexistent", onto: "parent"))
+        XCTAssertFalse(itemStore.canDropItem(draggedItemId: "nonexistent", onto: "parent", position: .into))
         // Non-existent target
-        XCTAssertFalse(itemStore.canDropItem(draggedItemId: "child", onto: "nonexistent"))
+        XCTAssertFalse(itemStore.canDropItem(draggedItemId: "child", onto: "nonexistent", position: .into))
     }
 
     func testMoveItemSortOrderAssignment() throws {
@@ -446,7 +446,7 @@ final class ItemStoreTests: XCTestCase {
         itemStore.loadItems()
 
         // When - Move new item into target
-        itemStore.moveItem(draggedItemId: "new", targetItemId: "target")
+        itemStore.moveItem(draggedItemId: "new", targetItemId: "target", position: .into)
 
         // Then - New item should get sortOrder 2 (max + 1)
         let movedItem = itemStore.items.first(where: { $0.id == "new" })

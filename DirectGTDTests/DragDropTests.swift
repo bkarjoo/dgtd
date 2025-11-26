@@ -373,9 +373,11 @@ final class DragDropTests: XCTestCase {
 
         // Then: child3 is now between child1 and child2
         let movedItem = itemStore.items.first(where: { $0.id == "child3" })
+        let updatedChild1 = itemStore.items.first(where: { $0.id == "child1" })
+        let updatedChild2 = itemStore.items.first(where: { $0.id == "child2" })
         XCTAssertEqual(movedItem?.parentId, "parent")
-        XCTAssertGreaterThan(movedItem!.sortOrder, child1.sortOrder)
-        XCTAssertLessThan(movedItem!.sortOrder, child2.sortOrder)
+        XCTAssertGreaterThan(movedItem!.sortOrder, updatedChild1!.sortOrder)
+        XCTAssertLessThan(movedItem!.sortOrder, updatedChild2!.sortOrder)
     }
 
     func testMoveItemBelowSibling() throws {
@@ -395,9 +397,11 @@ final class DragDropTests: XCTestCase {
 
         // Then: child1 is now between child2 and child3
         let movedItem = itemStore.items.first(where: { $0.id == "child1" })
+        let updatedChild2 = itemStore.items.first(where: { $0.id == "child2" })
+        let updatedChild3 = itemStore.items.first(where: { $0.id == "child3" })
         XCTAssertEqual(movedItem?.parentId, "parent")
-        XCTAssertGreaterThan(movedItem!.sortOrder, child2.sortOrder)
-        XCTAssertLessThan(movedItem!.sortOrder, child3.sortOrder)
+        XCTAssertGreaterThan(movedItem!.sortOrder, updatedChild2!.sortOrder)
+        XCTAssertLessThan(movedItem!.sortOrder, updatedChild3!.sortOrder)
     }
 
     func testMoveItemToBecomeSiblingFromDifferentParent() throws {

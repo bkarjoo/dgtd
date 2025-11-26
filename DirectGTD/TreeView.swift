@@ -566,7 +566,11 @@ struct ItemRow: View {
             }
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
+            .background(
+                store.dropTargetId == item.id && store.dropTargetPosition == .into
+                    ? Color.accentColor.opacity(0.15)
+                    : (isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
+            )
             .overlay(alignment: .top) {
                 if store.dropTargetId == item.id && store.dropTargetPosition == .above {
                     Rectangle()
