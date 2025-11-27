@@ -40,3 +40,122 @@
     - Call out that queries are raw SQLite and that only SELECT statements are allowed.
 
 This keeps the feature power-user focused: raw SQL only, but safe, documented, and integrated with the existing item tree.
+
+## SmartFolder Query Help Reference
+
+### Available Tables
+
+**items**
+- `id` TEXT PRIMARY KEY
+- `title` TEXT
+- `item_type` TEXT (Unknown, Task, Project, Note, Folder, Template, SmartFolder, Alias, Heading, Link, Attachment, Event)
+- `notes` TEXT
+- `parent_id` TEXT
+- `sort_order` INTEGER
+- `created_at` INTEGER (Unix timestamp)
+- `modified_at` INTEGER (Unix timestamp)
+- `completed_at` INTEGER (Unix timestamp, NULL if not completed)
+- `due_date` INTEGER (Unix timestamp)
+- `earliest_start_time` INTEGER (Unix timestamp)
+
+**tags**
+- `id` TEXT PRIMARY KEY
+- `name` TEXT
+- `color` TEXT
+
+**item_tags**
+- `item_id` TEXT
+- `tag_id` TEXT
+
+**app_settings**
+- `key` TEXT PRIMARY KEY
+- `value` TEXT
+
+### Common Query Patterns
+
+**Overdue Tasks**
+```sql
+SELECT id FROM items
+WHERE item_type = 'Task'
+  AND completed_at IS NULL
+  AND due_date < strftime('%s', 'now')
+ORDER BY due_date ASC
+```
+
+**Due Today**
+```sql
+SELECT id FROM items
+WHERE item_type = 'Task'
+  AND completed_at IS NULL
+  AND date(due_date, 'unixepoch') = date('now')
+ORDER BY due_date ASC
+```
+
+**Due This Week**
+```sql
+SELECT id FROM items
+WHERE item_type = 'Task'
+  AND completed_at IS NULL
+  AND due_date BETWEEN strftime('%s', 'now')
+    AND strftime('%s', 'now', '+7 days')
+ORDER BY due_date ASC
+```
+
+**Ready to Start** (no earliest start time or already started)
+```sql
+SELECT id FROM items
+WHERE item_type = 'Task'
+  AND completed_at IS NULL
+  AND (earliest_start_time IS NULL OR earliest_start_time <= strftime('%s', 'now'))
+ORDER BY due_date ASC
+```
+
+**Recently Completed** (last 7 days)
+```sql
+SELECT id FROM items
+WHERE item_type = 'Task'
+  AND completed_at >= strftime('%s', 'now', '-7 days')
+ORDER BY completed_at DESC
+```
+
+**Items with Specific Tag**
+```sql
+SELECT i.id FROM items i
+JOIN item_tags it ON i.id = it.item_id
+JOIN tags t ON it.tag_id = t.id
+WHERE t.name = 'Important'
+ORDER BY i.modified_at DESC
+```
+
+**Untagged Items**
+```sql
+SELECT id FROM items
+WHERE id NOT IN (SELECT item_id FROM item_tags)
+  AND item_type IN ('Task', 'Project')
+ORDER BY modified_at DESC
+```
+
+**Items Without Notes**
+```sql
+SELECT id FROM items
+WHERE (notes IS NULL OR notes = '')
+  AND item_type = 'Task'
+ORDER BY created_at DESC
+```
+
+### Date/Time Helpers
+
+- Current timestamp: `strftime('%s', 'now')`
+- Today start: `strftime('%s', 'now', 'start of day')`
+- Tomorrow: `strftime('%s', 'now', '+1 day')`
+- Next week: `strftime('%s', 'now', '+7 days')`
+- Date comparison: `date(timestamp, 'unixepoch') = date('now')`
+- Format date: `datetime(timestamp, 'unixepoch')`
+
+### Query Requirements
+
+- Queries MUST be SELECT statements only
+- Queries MUST return `id` as the first column (extra columns ignored)
+- Query timeout: 250ms
+- No multiple statements, no ATTACH, no PRAGMA writes
+- Use `strftime('%s', 'now')` for current time (no bound parameters needed)
