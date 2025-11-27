@@ -1,4 +1,5 @@
 import SwiftUI
+import MarkdownUI
 
 enum NoteEditorMode {
     case edit
@@ -27,11 +28,14 @@ struct NoteEditorView: View {
                         }
                         mode = mode == .edit ? .preview : .edit
                     }) {
-                        Image(systemName: mode == .edit ? "eye" : "pencil")
+                        Image(systemName: "pencil")
+                            .foregroundColor(mode == .edit ? .white : .primary)
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
+                    .background(mode == .edit ? Color.accentColor : Color.clear)
+                    .cornerRadius(6)
 
                     Spacer()
                 }
@@ -51,25 +55,20 @@ struct NoteEditorView: View {
                 } else {
                     // Preview mode - Markdown rendering
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            if !editedText.isEmpty {
-                                if let attributedString = try? AttributedString(markdown: editedText) {
-                                    Text(attributedString)
-                                        .textSelection(.enabled)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                } else {
-                                    Text(editedText)
-                                        .textSelection(.enabled)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            } else {
+                        if !editedText.isEmpty {
+                            Markdown(editedText)
+                                .padding(16)
+                                .textSelection(.enabled)
+                        } else {
+                            VStack {
+                                Spacer()
                                 Text("No notes")
                                     .foregroundColor(.secondary)
                                     .italic()
+                                Spacer()
                             }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
