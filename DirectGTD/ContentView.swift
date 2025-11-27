@@ -19,7 +19,7 @@ struct ContentView: View {
     @State private var newItemName = ""
     @State private var showingSettings = false
     @State private var showingTagFilter = false
-    @State private var rightPaneView: RightPaneView = .detail
+    @State private var rightPaneView: RightPaneView = .noteEditor
     @Environment(\.undoManager) var undoManager
 
     init() {

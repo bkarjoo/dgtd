@@ -9,7 +9,7 @@ enum NoteEditorMode {
 struct NoteEditorView: View {
     @ObservedObject var store: ItemStore
     @Binding var showDetailView: Bool
-    @State private var mode: NoteEditorMode = .edit
+    @State private var mode: NoteEditorMode = .preview
     @State private var editedText: String = ""
 
     var body: some View {
