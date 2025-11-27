@@ -30,12 +30,12 @@ struct NoteEditorView: View {
                     }) {
                         Image(systemName: "pencil")
                             .foregroundColor(mode == .edit ? .white : .primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(mode == .edit ? Color.accentColor : Color.clear)
+                            .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(mode == .edit ? Color.accentColor : Color.clear)
-                    .cornerRadius(6)
 
                     Spacer()
                 }
@@ -56,9 +56,46 @@ struct NoteEditorView: View {
                     // Preview mode - Markdown rendering
                     ScrollView {
                         if !editedText.isEmpty {
+                            let spacingValue = Double(store.settings.markdownLineSpacing)
+                            let spacingEm = RelativeSize.em(spacingValue / 10.0)
+
                             Markdown(editedText)
+                                .markdownTextStyle {
+                                    FontSize(store.settings.markdownFontSize)
+                                }
+                                // Paragraphs
+                                .markdownBlockStyle(\.paragraph) { configuration in
+                                    configuration.label
+                                        .relativeLineSpacing(spacingEm)
+                                        .markdownMargin(top: .zero, bottom: spacingEm)
+                                }
+                                // Headings
+                                .markdownBlockStyle(\.heading1) { configuration in
+                                    configuration.label
+                                        .relativeLineSpacing(spacingEm)
+                                }
+                                .markdownBlockStyle(\.heading2) { configuration in
+                                    configuration.label
+                                        .relativeLineSpacing(spacingEm)
+                                }
+                                .markdownBlockStyle(\.heading3) { configuration in
+                                    configuration.label
+                                        .relativeLineSpacing(spacingEm)
+                                }
+                                // Lists: spacing between bullets + multi-line bullets
+                                .markdownBlockStyle(\.listItem) { configuration in
+                                    configuration.label
+                                        .relativeLineSpacing(spacingEm)
+                                        .markdownMargin(top: spacingEm)
+                                }
+                                // Code blocks
+                                .markdownBlockStyle(\.codeBlock) { configuration in
+                                    configuration.label
+                                        .relativeLineSpacing(spacingEm)
+                                }
                                 .padding(16)
                                 .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
                             VStack {
                                 Spacer()

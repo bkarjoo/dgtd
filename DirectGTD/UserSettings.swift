@@ -13,6 +13,8 @@ class UserSettings: ObservableObject {
         static let verticalMargin = "verticalMargin"
         static let lineSpacing = "lineSpacing"
         static let showCompletedTasks = "showCompletedTasks"
+        static let markdownFontSize = "markdownFontSize"
+        static let markdownLineSpacing = "markdownLineSpacing"
     }
 
     @Published var fontSize: CGFloat {
@@ -51,6 +53,18 @@ class UserSettings: ObservableObject {
         }
     }
 
+    @Published var markdownFontSize: CGFloat {
+        didSet {
+            defaults.set(markdownFontSize, forKey: Keys.markdownFontSize)
+        }
+    }
+
+    @Published var markdownLineSpacing: CGFloat {
+        didSet {
+            defaults.set(markdownLineSpacing, forKey: Keys.markdownLineSpacing)
+        }
+    }
+
     init() {
         // Load fontSize from UserDefaults, default to 13
         self.fontSize = defaults.object(forKey: Keys.fontSize) as? CGFloat ?? 13
@@ -66,5 +80,11 @@ class UserSettings: ObservableObject {
 
         // Load showCompletedTasks, default to true
         self.showCompletedTasks = defaults.object(forKey: Keys.showCompletedTasks) as? Bool ?? true
+
+        // Load markdownFontSize, default to 14
+        self.markdownFontSize = defaults.object(forKey: Keys.markdownFontSize) as? CGFloat ?? 14
+
+        // Load markdownLineSpacing, default to 4
+        self.markdownLineSpacing = defaults.object(forKey: Keys.markdownLineSpacing) as? CGFloat ?? 4
     }
 }

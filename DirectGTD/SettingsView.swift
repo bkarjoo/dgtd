@@ -85,6 +85,18 @@ struct SettingsView: View {
                     Slider(value: $settings.lineSpacing, in: 0...16, step: 1)
                 }
             }
+
+            Section("Markdown") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Font Size: \(Int(settings.markdownFontSize))")
+                    Slider(value: $settings.markdownFontSize, in: 8...48, step: 1)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Line Spacing: \(Int(settings.markdownLineSpacing))")
+                    Slider(value: $settings.markdownLineSpacing, in: 0...16, step: 1)
+                }
+            }
             }
             .formStyle(.grouped)
         }
