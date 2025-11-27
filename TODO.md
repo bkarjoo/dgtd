@@ -1,5 +1,13 @@
 # TODO
 
+## Distribution
+
+- Create proper .dmg installer for macOS
+  - Archive build with proper signing
+  - Create .dmg with background image
+  - Include Applications folder symlink for drag-and-drop installation
+  - Code signing and notarization for distribution outside App Store
+
 ## SmartFolders Requirements
 
 - Scope: SmartFolders are items of type SmartFolder that display dynamic query results; target users are SQL-proficient, so UI is minimal.
