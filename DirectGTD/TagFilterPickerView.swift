@@ -37,6 +37,8 @@ struct TagFilterPickerView: View {
                         ForEach(sortedTags) { tag in
                             Button(action: {
                                 store.filteredByTag = tag
+                                // Clear SQL search (mutual exclusivity)
+                                store.clearSQLSearch()
                                 onDismiss()
                             }) {
                                 HStack(spacing: 12) {

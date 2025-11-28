@@ -261,6 +261,86 @@ class ItemRepository {
             }
         )
     }
+
+    // MARK: - Saved Searches
+
+    func getAllSavedSearches() throws -> [SavedSearch] {
+        guard let queue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try queue.read { db in
+            try SavedSearch
+                .order(Column("sort_order"))
+                .fetchAll(db)
+        }
+    }
+
+    func createSavedSearch(_ search: SavedSearch) throws {
+        guard let queue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        try queue.write { db in
+            try search.insert(db)
+        }
+    }
+
+    func updateSavedSearch(_ search: SavedSearch) throws {
+        guard let queue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        try queue.write { db in
+            try search.update(db)
+        }
+    }
+
+    func deleteSavedSearch(id: String) throws {
+        guard let queue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        try queue.write { db in
+            try SavedSearch.deleteOne(db, key: id)
+        }
+    }
+
+    // MARK: - SQL Query Execution
+
+    func executeSQLQuery(_ sql: String) throws -> [String] {
+        guard let queue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        // Validate query is SELECT only
+        let trimmedSQL = sql.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard trimmedSQL.hasPrefix("SELECT") else {
+            throw DatabaseError.invalidQuery("Only SELECT queries are allowed")
+        }
+
+        // Check for dangerous keywords
+        let dangerous = ["DELETE", "UPDATE", "INSERT", "DROP", "ALTER", "CREATE", "ATTACH", "PRAGMA"]
+        for keyword in dangerous {
+            if trimmedSQL.contains(keyword) {
+                throw DatabaseError.invalidQuery("Query contains forbidden keyword: \(keyword)")
+            }
+        }
+
+        return try queue.read { db in
+            // Execute query and extract first column (id) from each row
+            let rows = try Row.fetchAll(db, sql: sql)
+            var itemIds: [String] = []
+
+            for row in rows {
+                if let id = row[0] as? String {
+                    itemIds.append(id)
+                }
+            }
+
+            return itemIds
+        }
+    }
 }
 
 // MARK: - Error Handling
@@ -268,6 +348,7 @@ class ItemRepository {
 enum DatabaseError: Error, LocalizedError {
     case notInitialized
     case itemNotFound
+    case invalidQuery(String)
 
     var errorDescription: String? {
         switch self {
@@ -275,6 +356,8 @@ enum DatabaseError: Error, LocalizedError {
             return "Database is not initialized"
         case .itemNotFound:
             return "Item not found"
+        case .invalidQuery(let message):
+            return message
         }
     }
 }

@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var newItemName = ""
     @State private var showingSettings = false
     @State private var showingTagFilter = false
+    @State private var showingSQLSearch = false
     @State private var rightPaneView: RightPaneView = .noteEditor
     @Environment(\.undoManager) var undoManager
 
@@ -55,6 +56,33 @@ struct ContentView: View {
                 }
 
                 Button(action: {
+                    showingSQLSearch = true
+                }) {
+                    Image(systemName: "magnifyingglass")
+                        .symbolVariant(store.sqlSearchActive ? .circle.fill : .none)
+                        .foregroundColor(store.sqlSearchActive ? .accentColor : .primary)
+                }
+                .buttonStyle(.plain)
+                .padding()
+                .help("SQL Search")
+
+                Button(action: {
+                    if store.focusedItemId != nil {
+                        store.focusedItemId = nil
+                    } else if let selectedId = store.selectedItemId {
+                        store.focusedItemId = selectedId
+                    }
+                }) {
+                    Image(systemName: "scope")
+                        .symbolVariant(store.focusedItemId != nil ? .circle.fill : .none)
+                        .foregroundColor(store.focusedItemId != nil ? .accentColor : .primary)
+                }
+                .buttonStyle(.plain)
+                .padding()
+                .disabled(store.focusedItemId == nil && store.selectedItemId == nil)
+                .help("Focus Mode")
+
+                Button(action: {
                     rightPaneView = rightPaneView == .detail ? .noteEditor : .detail
                 }) {
                     Image(systemName: rightPaneView == .noteEditor ? "doc.text.fill" : "doc.text")
@@ -62,6 +90,13 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .padding()
+
+                Button(action: { store.loadItems() }) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+                .padding()
+                .help("Refresh")
 
                 Button(action: { undoManager?.undo() }) {
                     Image(systemName: "arrow.uturn.backward")
@@ -86,10 +121,13 @@ struct ContentView: View {
                 .padding()
             }
 
-            // Split view: Tree on left, Detail on right (or Search)
+            // Split view: Tree on left, Detail on right (or Search/SQL Results)
             HSplitView {
                 if store.isSearching {
                     SearchResultsView(store: store)
+                        .frame(minWidth: 200, idealWidth: 300, maxWidth: .infinity)
+                } else if store.sqlSearchActive {
+                    SQLSearchResultsView(store: store)
                         .frame(minWidth: 200, idealWidth: 300, maxWidth: .infinity)
                 } else {
                     TreeView(store: store, settings: settings)
@@ -120,6 +158,9 @@ struct ContentView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView(settings: settings, store: store)
         }
+        .sheet(isPresented: $showingSQLSearch) {
+            SQLSearchView(store: store)
+        }
         .alert("Error", isPresented: Binding(
             get: { store.errorMessage != nil },
             set: { if !$0 { store.errorMessage = nil } }
@@ -135,10 +176,24 @@ struct ContentView: View {
         }
         .onKeyPress { keyPress in
             if keyPress.key == KeyEquivalent("f") && keyPress.modifiers.contains(.command) {
+                // Cmd+Shift+F: Toggle focus mode
+                if keyPress.modifiers.contains(.shift) {
+                    if store.focusedItemId != nil {
+                        store.focusedItemId = nil
+                    } else if let selectedId = store.selectedItemId {
+                        store.focusedItemId = selectedId
+                    }
+                    return .handled
+                }
+                // Cmd+F: Toggle search
                 store.isSearching.toggle()
                 if !store.isSearching {
                     store.searchText = ""
                 }
+                return .handled
+            }
+            if keyPress.key == KeyEquivalent("r") && keyPress.modifiers.contains(.command) {
+                store.loadItems()
                 return .handled
             }
             return .ignored

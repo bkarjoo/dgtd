@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject var store: ItemStore
     @Environment(\.dismiss) var dismiss
     @State private var quickCaptureFolderId: String?
+    @State private var archiveFolderId: String?
     @State private var showingTagManager: Bool = false
 
     var body: some View {
@@ -32,6 +33,18 @@ struct SettingsView: View {
                 }
                 .onChange(of: quickCaptureFolderId) { oldValue, newValue in
                     saveQuickCaptureFolder(newValue)
+                }
+            }
+
+            Section("Archive") {
+                Picker("Archive Folder", selection: $archiveFolderId) {
+                    Text("None").tag(String?.none)
+                    ForEach(folderItems, id: \.id) { folder in
+                        Text(folder.title ?? "Untitled").tag(String?.some(folder.id))
+                    }
+                }
+                .onChange(of: archiveFolderId) { oldValue, newValue in
+                    saveArchiveFolder(newValue)
                 }
             }
 
@@ -103,6 +116,7 @@ struct SettingsView: View {
         .frame(width: 400, height: 400)
         .onAppear {
             loadQuickCaptureFolder()
+            loadArchiveFolder()
         }
         .sheet(isPresented: $showingTagManager) {
             TagManagerView(store: store)
@@ -121,6 +135,16 @@ struct SettingsView: View {
     private func saveQuickCaptureFolder(_ folderId: String?) {
         let repository = ItemRepository()
         try? repository.setSetting(key: "quick_capture_folder_id", value: folderId)
+    }
+
+    private func loadArchiveFolder() {
+        let repository = ItemRepository()
+        archiveFolderId = try? repository.getSetting(key: "archive_folder_id")
+    }
+
+    private func saveArchiveFolder(_ folderId: String?) {
+        let repository = ItemRepository()
+        try? repository.setSetting(key: "archive_folder_id", value: folderId)
     }
 }
 

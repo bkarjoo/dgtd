@@ -1094,4 +1094,49 @@ class ItemStore: ObservableObject {
 
         return path.joined(separator: " > ")
     }
+
+    // MARK: - SQL Search
+
+    func loadSavedSearches() {
+        do {
+            savedSearches = try repository.getAllSavedSearches()
+        } catch {
+            print("Error loading saved searches: \(error)")
+        }
+    }
+
+    func executeSQLSearch(query: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        do {
+            let itemIds = try repository.executeSQLQuery(query)
+
+            // Update state
+            sqlSearchQuery = query
+            sqlSearchResults = itemIds
+            sqlSearchActive = true
+
+            // Clear tag filter (mutual exclusivity)
+            filteredByTag = nil
+
+            completion(.success(()))
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
+    func clearSQLSearch() {
+        sqlSearchActive = false
+        sqlSearchQuery = ""
+        sqlSearchResults = []
+    }
+
+    func saveSQLSearch(name: String, sql: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        do {
+            let search = SavedSearch(name: name, sql: sql)
+            try repository.createSavedSearch(search)
+            loadSavedSearches()
+            completion(.success(()))
+        } catch {
+            completion(.failure(error))
+        }
+    }
 }

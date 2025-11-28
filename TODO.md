@@ -8,48 +8,82 @@
   - Include Applications folder symlink for drag-and-drop installation
   - Code signing and notarization for distribution outside App Store
 
-## SmartFolders Requirements
+## Archive Functionality
 
-- Scope: SmartFolders are items of type SmartFolder that display dynamic query results; target users are SQL-proficient, so UI is minimal.
+- Archive folder setting (already implemented in SettingsView)
+  - Stored in `app_settings` table with key `archive_folder_id`
+  - Picker in Settings to select which folder serves as the archive
+- Move items to archive
+  - Keyboard shortcut or context menu action to move selected item(s) to the archive folder
+  - Moves item and all descendants to the archive folder as children
+  - Preserves item hierarchy within the archive
+- Move items out of archive to root
+  - Action to "unarchive" items, moving them from archive folder to root level
+  - Should work on selected item(s) when viewing archive contents
+  - Maintains sort order when moving to root
+- Hide/show archive folder
+  - Setting or toolbar toggle to hide the archive folder from the tree view
+  - When hidden, archive folder and its contents are not visible
+  - When shown, archive folder appears like any other folder
+  - State persists across app restarts (stored in UserSettings or app_settings)
+
+## Templates
+
+- Template items can be instantiated into the tree along with their entire descendant hierarchy.
+  - Decide whether templates live in the main tree or a dedicated Templates area, and add UI affordances for browsing them.
+  - Provide "Create from Template" entry points (context menu, toolbar, quick capture) that prompt for the destination and optional renaming.
+  - When instantiating, clone all descendants, preserving structure, tags, notes, and relative sort orders.
+  - Consider placeholders/variables for due dates or titles so template instances can adapt at creation time.
+
+## Custom Shortcuts
+
+- Allow users to bind keyboard shortcuts to saved searches and template instantiation commands.
+  - Shortcut editor UI in Settings that lists available actions (specific saved searches, specific templates) and lets users assign system-wide key combos.
+  - Persist shortcut mappings in `app_settings` (or a new table) and load them at launch.
+  - Detect conflicts with existing/default shortcuts and provide inline warnings.
+  - Include support for triggering shortcuts even when the search or template panel is not open, with visual feedback that the action ran.
+
+## SQL Search Mode Requirements
+
+- Scope: Replace SmartFolders entirely with a SQL-driven search mode that overlays the existing list, similar to the current tag filter; no new
+  item types or tree nodes.
+- Invocation & Indicator
+    - A magnifying-glass icon sits with the tag filter icon; clicking it enters search mode and opens the search dialog.
+    - While a search is active, the icon shows a filled blue background as the affordance that filtering is applied.
+    - Clicking the filled icon again reopens the dialog pre-populated with the active query so it can be tweaked or rerun.
+    - SQL search and tag filter are mutually exclusive: activating one clears the other.
+- Search Dialog
+    - Provides a multi-line monospaced SQL editor, Run button, Cancel button, and Clear button.
+    - Run executes the SQL, applies the results to the main list (same area used for tag filtering), and closes the dialog. Cancel closes the dialog
+      without changing mode. Clear exits search mode entirely, removes the filter, and closes the dialog.
+    - Errors from SQLite are surfaced inline with the message and line number when available.
+    - Dialog closes automatically after Run; click the filled icon to reopen and modify the query.
+- Saved Searches
+    - Dialog includes "Save Search…" button that captures a user-provided name + SQL, stored for later reuse; saving immediately runs the query
+      and closes the dialog.
+    - All saved searches are displayed as a clickable list below the SQL editor within the same dialog; clicking a saved search populates the
+      editor with its SQL (does not auto-run, allowing user to modify before clicking Run).
+    - Provide "Manage Saved Searches" under Settings next to "Manage Tags" for viewing, renaming, reordering, and deleting saved entries.
 - Storage
-    - Add a smart_folder_query TEXT column (nullable) to items.
-    - SmartFolder rows must have item_type = 'SmartFolder' and non‑NULL smart_folder_query.
-    - Migration should leave existing data untouched; seeded SmartFolders will populate this column.
+    - Add a `saved_searches` table: `id` TEXT PK, `name` TEXT NOT NULL, `sql` TEXT NOT NULL, `sort_order` INTEGER, timestamps.
+    - Persist the active ad-hoc search (if any) in app settings so a relaunch can restore it with the icon highlighted.
 - Query Execution
-    - Run the SQL exactly as stored, but enforce READ‑ONLY:
-        - Use SQLite's authorizer (or simple parser) to reject any statement that isn't a single SELECT.
-        - Disallow multiple statements, ATTACH, PRAGMA writes, etc.
-        - Execute via a dedicated read-only connection/context with a short timeout (e.g., 250 ms) so expensive queries can't freeze the UI.
-    - Parameters:
-        - Provide ? bindings for dynamic values if needed (e.g., :now), or allow users to call strftime('%s','now') directly; document whichever
-          approach is chosen.
-    - Result set should be item IDs; if a query returns extra columns, ignore them.
-- UI/UX
-    - Tree view shows SmartFolders alongside other items (icon already defined).
-    - Selecting a SmartFolder runs its query and displays the result list in the main pane; selection/edit commands operate on the result items.
-    - SmartFolder editor:
-        - Text field (multi-line, monospaced) for raw SQL.
-        - "Test Query" button that runs the SQL and reports count + example item titles.
-        - Error surface shows SQLite error message with line number if parse/run fails.
-        - Collapsible "Schema Reference" panel listing tables/columns and common snippets (joins to item_tags, date helpers).
-    - No GUI query builder—SQL is the only authoring method.
-- Seeding
-    - On first run (or via migration), insert a handful of SmartFolders with predefined SQL (Overdue, Due Today, Due This Week, Ready to Start,
-      Completed) to serve as documentation/examples. Users can edit the SQL directly.
+    - Raw SQL is executed exactly as entered but must be read-only:
+        - Reject anything that isn't a single SELECT statement; disallow multiple statements, ATTACH, PRAGMA writes, or DDL/DML.
+        - Execute via a dedicated read-only connection/context with a short timeout (~250 ms) so pathological queries cannot freeze the UI.
+        - Provide documented helpers (strftime, etc.) instead of bound parameters; we rely on users writing valid SQLite syntax.
+    - The query's first column must be `id` values from `items`; extra columns are ignored.
+    - Results populate the same list view used elsewhere, so standard selection/edit commands continue to operate on the returned items.
+- UX Parity with Tag Filter
+    - Search mode behaves like tag filtering: selecting rows shows filtered results, and leaving search mode returns to the previous list.
+    - Only one saved search (or the ad-hoc editor contents) can be active at any time; no multi-select.
 - Testing
-    - Unit tests ensuring:
-        - Non-SELECT queries (e.g., DELETE) are rejected.
-        - Queries with syntax errors show the error and don't crash.
-        - Sample queries return expected item IDs given synthetic data.
-        - Performance: a pathological query times out and surfaces a friendly error.
-    - Integration test verifying SmartFolder selection updates the visible list and honors tag/visibility rules if applicable.
+    - Unit coverage for read-only enforcement, timeout behavior, SQL error surfacing, saved-search CRUD, and persistence of the active query.
+    - Integration test to ensure toggling the icon, running a query, clearing it, and switching between saved searches works along with tag filters.
 - Docs
-    - Update in-app help/README to explain SmartFolders, the schema snippet, and sample queries.
-    - Call out that queries are raw SQLite and that only SELECT statements are allowed.
+    - Update help/README to explain SQL search mode, how to invoke it, how to save/manage searches, and reiterate the SELECT-only rule.
 
-This keeps the feature power-user focused: raw SQL only, but safe, documented, and integrated with the existing item tree.
-
-## SmartFolder Query Help Reference
+## Search Query Help Reference
 
 ### Available Tables
 
