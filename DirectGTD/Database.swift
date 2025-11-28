@@ -120,6 +120,32 @@ open class Database: DatabaseProvider {
             NSLog("Database: Migration v4 completed successfully")
         }
 
+        // Register v5 migration (add saved_searches table)
+        migrator.registerMigration("v5") { db in
+            NSLog("Database: Running migration v5 (add saved_searches table)")
+
+            // Check if table already exists (for databases created from updated schema.sql)
+            let tableExists = try db.tableExists("saved_searches")
+
+            if !tableExists {
+                try db.execute(sql: """
+                    CREATE TABLE saved_searches (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        sql TEXT NOT NULL,
+                        sort_order INTEGER DEFAULT 0,
+                        created_at INTEGER NOT NULL,
+                        modified_at INTEGER NOT NULL
+                    )
+                """)
+                NSLog("Database: Created saved_searches table")
+            } else {
+                NSLog("Database: saved_searches table already exists, skipping")
+            }
+
+            NSLog("Database: Migration v5 completed successfully")
+        }
+
         // Handle backward compatibility: Detect legacy databases and reset them
         try queue.write { db in
             // State Detection Step 1: Check if grdb_migrations table exists

@@ -40,6 +40,15 @@ CREATE TABLE app_settings (
     value TEXT
 );
 
+CREATE TABLE saved_searches (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    sql TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    modified_at INTEGER NOT NULL
+);
+
 -- Indexes for performance
 CREATE INDEX idx_parent_id ON items(parent_id);
 CREATE INDEX idx_item_tags_item ON item_tags(item_id);

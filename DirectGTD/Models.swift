@@ -155,3 +155,40 @@ struct ItemTag: Codable, FetchableRecord, PersistableRecord {
         self.tagId = tagId
     }
 }
+
+// MARK: - SavedSearch Model
+struct SavedSearch: Codable, FetchableRecord, PersistableRecord, Identifiable {
+    var id: String
+    var name: String
+    var sql: String
+    var sortOrder: Int
+    var createdAt: Int
+    var modifiedAt: Int
+
+    static let databaseTableName = "saved_searches"
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case sql
+        case sortOrder = "sort_order"
+        case createdAt = "created_at"
+        case modifiedAt = "modified_at"
+    }
+
+    init(
+        id: String = UUID().uuidString,
+        name: String,
+        sql: String,
+        sortOrder: Int = 0,
+        createdAt: Int = Int(Date().timeIntervalSince1970),
+        modifiedAt: Int = Int(Date().timeIntervalSince1970)
+    ) {
+        self.id = id
+        self.name = name
+        self.sql = sql
+        self.sortOrder = sortOrder
+        self.createdAt = createdAt
+        self.modifiedAt = modifiedAt
+    }
+}

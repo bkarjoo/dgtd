@@ -24,6 +24,12 @@ class ItemStore: ObservableObject {
     @Published private(set) var itemTags: [String: [Tag]] = [:] // Cache: itemId -> tags
     @Published var filteredByTag: Tag? = nil
     @Published var draggedItemId: String? = nil
+    @Published var focusedItemId: String? = nil
+    @Published var sqlSearchActive: Bool = false
+    @Published var sqlSearchQuery: String = ""
+    @Published var sqlSearchResults: [String] = [] // Item IDs from SQL query
+    @Published var showingSQLSearch: Bool = false
+    @Published private(set) var savedSearches: [SavedSearch] = []
     private let repository: ItemRepository
     let settings: UserSettings
     var undoManager: UndoManager?
@@ -824,6 +830,9 @@ class ItemStore: ObservableObject {
         // Check if item passes filter/visibility rules
         guard shouldShowItem(item) else { return false }
 
+        // Check if item is in focus subtree (when focus mode is active)
+        guard isInFocusSubtree(itemId: itemId) else { return false }
+
         // Root items are visible if they pass shouldShowItem
         guard let parentId = item.parentId else { return true }
 
@@ -832,6 +841,17 @@ class ItemStore: ObservableObject {
 
         // Recursively check if parent is visible
         return isItemVisible(itemId: parentId)
+    }
+
+    private func isInFocusSubtree(itemId: String) -> Bool {
+        guard let focusedId = focusedItemId else { return true }
+
+        // The focused item itself is always in the focus subtree
+        if itemId == focusedId { return true }
+
+        // Check if this item is a descendant of the focused item
+        guard let focusedItem = items.first(where: { $0.id == focusedId }) else { return true }
+        return isDescendant(of: focusedItem, itemId: itemId)
     }
 
     private func collectSubtree(itemId: String) -> [Item] {
