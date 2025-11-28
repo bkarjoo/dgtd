@@ -830,6 +830,11 @@ class ItemStore: ObservableObject {
     }
 
     func shouldShowItem(_ item: Item) -> Bool {
+        // Filter by SQL search if active (takes precedence)
+        if sqlSearchActive {
+            return matchesSQLSearch(item)
+        }
+
         // Filter by tag if active (takes precedence over completed check)
         if filteredByTag != nil {
             return matchesTagFilter(item)
@@ -938,6 +943,34 @@ class ItemStore: ObservableObject {
         for child in children {
             let childHasTag = getTagsForItem(itemId: child.id).contains { $0.id == tagId }
             if childHasTag || hasDescendantWithTag(child, tagId: tagId, allItems: allItems) {
+                return true
+            }
+        }
+        return false
+    }
+
+    func matchesSQLSearch(_ item: Item) -> Bool {
+        guard sqlSearchActive else {
+            return true // No SQL search active
+        }
+
+        // Check if this item is in the SQL search results
+        if sqlSearchResults.contains(item.id) {
+            return true
+        }
+
+        // Check if any descendant is in the SQL search results (show parents of matching items)
+        if hasDescendantInSQLResults(item, allItems: items) {
+            return true
+        }
+
+        return false
+    }
+
+    func hasDescendantInSQLResults(_ item: Item, allItems: [Item]) -> Bool {
+        let children = allItems.filter { $0.parentId == item.id }
+        for child in children {
+            if sqlSearchResults.contains(child.id) || hasDescendantInSQLResults(child, allItems: allItems) {
                 return true
             }
         }

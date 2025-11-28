@@ -313,25 +313,14 @@ class ItemRepository {
             throw DatabaseError.notInitialized
         }
 
-        // Validate query is SELECT only
-        let trimmedSQL = sql.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard trimmedSQL.hasPrefix("SELECT") else {
-            throw DatabaseError.invalidQuery("Only SELECT queries are allowed")
-        }
-
-        // Check for dangerous keywords
-        let dangerous = ["DELETE", "UPDATE", "INSERT", "DROP", "ALTER", "CREATE", "ATTACH", "PRAGMA"]
-        for keyword in dangerous {
-            if trimmedSQL.contains(keyword) {
-                throw DatabaseError.invalidQuery("Query contains forbidden keyword: \(keyword)")
-            }
-        }
-
+        // Use read transaction for read-only enforcement
+        // SQLite read transactions prevent all write operations including:
+        // INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, ATTACH, VACUUM
         return try queue.read { db in
             // Execute query and extract first column (id) from each row
             let rows = try Row.fetchAll(db, sql: sql)
-            var itemIds: [String] = []
 
+            var itemIds: [String] = []
             for row in rows {
                 if let id = row[0] as? String {
                     itemIds.append(id)

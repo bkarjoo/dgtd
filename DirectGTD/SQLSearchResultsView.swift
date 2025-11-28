@@ -71,8 +71,9 @@ struct SQLSearchResultsView: View {
     }
 
     private var resultsItems: [Item] {
-        store.items.filter { item in
-            store.sqlSearchResults.contains(item.id)
+        // Iterate over sqlSearchResults to preserve SQL ORDER BY clause
+        store.sqlSearchResults.compactMap { id in
+            store.items.first { $0.id == id }
         }
     }
 }

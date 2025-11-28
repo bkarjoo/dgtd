@@ -121,15 +121,13 @@ struct ContentView: View {
                 .padding()
             }
 
-            // Split view: Tree on left, Detail on right (or Search/SQL Results)
+            // Split view: Tree on left, Detail on right (or Search Results)
             HSplitView {
                 if store.isSearching {
                     SearchResultsView(store: store)
                         .frame(minWidth: 200, idealWidth: 300, maxWidth: .infinity)
-                } else if store.sqlSearchActive {
-                    SQLSearchResultsView(store: store)
-                        .frame(minWidth: 200, idealWidth: 300, maxWidth: .infinity)
                 } else {
+                    // TreeView filters by SQL search via shouldShowItem (like tag filter)
                     TreeView(store: store, settings: settings)
                         .frame(minWidth: 200, idealWidth: 300, maxWidth: .infinity)
                 }
