@@ -47,6 +47,11 @@ class ItemStore: ObservableObject {
             items = try repository.getAllItems()
             loadTags()
 
+            // Validate focusedItemId - clear if the item no longer exists
+            if let focusedId = focusedItemId, !items.contains(where: { $0.id == focusedId }) {
+                focusedItemId = nil
+            }
+
             // Start observation after first successful load
             if databaseObserver == nil {
                 startDatabaseObservation()
@@ -587,15 +592,29 @@ class ItemStore: ObservableObject {
                 try repository.delete(itemId: editId)
                 loadItems()
 
-                // Select previous item, or next item, or nil
+                // Select previous visible item, or next visible item, or nil
                 let newOrderedItems = getAllItemsInOrder()
-                if currentIndex > 0 && currentIndex - 1 < newOrderedItems.count {
-                    selectedItemId = newOrderedItems[currentIndex - 1].id
-                } else if !newOrderedItems.isEmpty {
-                    selectedItemId = newOrderedItems[0].id
-                } else {
-                    selectedItemId = nil
+
+                // Try to find a visible item going backwards from the deleted position
+                var newSelection: String? = nil
+                for i in stride(from: currentIndex - 1, through: 0, by: -1) {
+                    if i < newOrderedItems.count && isItemVisible(itemId: newOrderedItems[i].id) {
+                        newSelection = newOrderedItems[i].id
+                        break
+                    }
                 }
+
+                // If no visible item found backwards, try forwards
+                if newSelection == nil {
+                    for i in currentIndex..<newOrderedItems.count {
+                        if isItemVisible(itemId: newOrderedItems[i].id) {
+                            newSelection = newOrderedItems[i].id
+                            break
+                        }
+                    }
+                }
+
+                selectedItemId = newSelection
             } catch {
                 print("Error deleting empty item: \(error)")
             }

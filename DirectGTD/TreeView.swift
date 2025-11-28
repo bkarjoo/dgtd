@@ -191,6 +191,11 @@ struct TreeView: View {
                 }
                 return .handled
             case KeyEquivalent("f"), KeyEquivalent("F"):
+                // Only create folder if no command modifier is pressed
+                // (let Cmd+F and Cmd+Shift+F pass through to ContentView)
+                if keyPress.modifiers.contains(.command) {
+                    return .ignored
+                }
                 DispatchQueue.main.async {
                     store.createItemAfterSelected(withType: .folder)
                 }
@@ -277,7 +282,14 @@ struct TreeView: View {
     }
 
     private var rootItems: [Item] {
-        store.items
+        // In focus mode, the focused item is the only root
+        if let focusedId = store.focusedItemId,
+           let focusedItem = store.items.first(where: { $0.id == focusedId }) {
+            return [focusedItem]
+        }
+
+        // Normal mode: show all root items
+        return store.items
             .filter { $0.parentId == nil }
             .filter { store.shouldShowItem($0) }
             .sorted { $0.sortOrder < $1.sortOrder }
@@ -293,7 +305,9 @@ struct TreeView: View {
                     .filter { $0.parentId == item.id }
                     .filter { store.shouldShowItem($0) }
                     .sorted { $0.sortOrder < $1.sortOrder }
-                if !children.isEmpty && store.settings.expandedItemIds.contains(item.id) {
+                // In focus mode, show all descendants regardless of expansion state
+                let shouldShowChildren = !children.isEmpty && (store.focusedItemId != nil || store.settings.expandedItemIds.contains(item.id))
+                if shouldShowChildren {
                     collectItems(children)
                 }
             }
