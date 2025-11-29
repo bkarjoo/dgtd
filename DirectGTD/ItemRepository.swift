@@ -326,12 +326,9 @@ class ItemRepository {
             throw DatabaseError.invalidQuery("Only SELECT queries are allowed. PRAGMA, ANALYZE, and other commands are not permitted.")
         }
 
-        // Check for multiple statements (skip semicolons in string literals)
-        let semicolonCount = countSemicolonsOutsideStrings(trimmedSQL)
-
-        // Reject queries with more than 1 semicolon (multiple statements)
-        // Allow 0 or 1 semicolons (single statement, optionally with trailing ; or ; -- comment)
-        if semicolonCount > 1 {
+        // Check for multiple statements (parse SQL to detect statement boundaries)
+        // Must handle string literals, line comments (--), and block comments (/* */)
+        if hasMultipleStatements(trimmedSQL) {
             throw DatabaseError.invalidQuery("Only single SELECT statements are allowed. Multiple statements are not permitted.")
         }
 
@@ -419,40 +416,90 @@ class ItemRepository {
         }
     }
 
-    // Helper: Count semicolons outside of string literals
-    // SQLite uses single quotes for strings, doubled quotes for escaping
-    private func countSemicolonsOutsideStrings(_ sql: String) -> Int {
+    // Helper: Check if SQL contains multiple statements
+    // Handles string literals ('...' with '' escaping), line comments (--), and block comments (/* */)
+    // Returns true if multiple statements detected (semicolon followed by non-comment content)
+    private func hasMultipleStatements(_ sql: String) -> Bool {
         var inString = false
-        var semicolonCount = 0
+        var inLineComment = false
+        var inBlockComment = false
+        var foundFirstSemicolon = false
+        var hasContentAfterSemicolon = false
         var i = sql.startIndex
 
         while i < sql.endIndex {
             let char = sql[i]
 
             if inString {
+                // Inside string literal
                 if char == "'" {
-                    // Check next character for escaped quote
                     let next = sql.index(after: i)
                     if next < sql.endIndex && sql[next] == "'" {
-                        // Doubled quote - skip both
+                        // Doubled quote (escape) - skip both
                         i = next
                     } else {
                         // End of string
                         inString = false
                     }
                 }
+            } else if inLineComment {
+                // Inside line comment (-- to newline)
+                if char == "\n" {
+                    inLineComment = false
+                }
+            } else if inBlockComment {
+                // Inside block comment (/* to */)
+                if char == "*" {
+                    let next = sql.index(after: i)
+                    if next < sql.endIndex && sql[next] == "/" {
+                        inBlockComment = false
+                        i = next // Skip the '/'
+                    }
+                }
             } else {
-                if char == "'" {
+                // Not in string or comment - actual SQL code
+                if char == "-" {
+                    let next = sql.index(after: i)
+                    if next < sql.endIndex && sql[next] == "-" {
+                        // Start of line comment
+                        inLineComment = true
+                        i = next // Skip second '-'
+                    }
+                } else if char == "/" {
+                    let next = sql.index(after: i)
+                    if next < sql.endIndex && sql[next] == "*" {
+                        // Start of block comment
+                        inBlockComment = true
+                        i = next // Skip '*'
+                    }
+                } else if char == "'" {
+                    // Start of string literal
+                    if foundFirstSemicolon {
+                        // SQL code after semicolon = multiple statements
+                        hasContentAfterSemicolon = true
+                    }
                     inString = true
                 } else if char == ";" {
-                    semicolonCount += 1
+                    // Semicolon found
+                    if !foundFirstSemicolon {
+                        foundFirstSemicolon = true
+                    } else {
+                        // Second semicolon = multiple statements
+                        return true
+                    }
+                } else if !char.isWhitespace {
+                    // Non-whitespace character
+                    if foundFirstSemicolon {
+                        // SQL code after semicolon = multiple statements
+                        hasContentAfterSemicolon = true
+                    }
                 }
             }
 
             i = sql.index(after: i)
         }
 
-        return semicolonCount
+        return hasContentAfterSemicolon
     }
 }
 
