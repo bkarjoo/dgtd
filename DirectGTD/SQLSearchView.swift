@@ -33,6 +33,7 @@ struct SQLSearchView: View {
                     .font(.system(.body, design: .monospaced))
                     .frame(height: 120)
                     .border(Color.gray.opacity(0.3))
+                    .autocorrectionDisabled()
 
                 if let error = errorMessage {
                     Text(error)

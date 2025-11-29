@@ -657,6 +657,11 @@ struct ItemRow: View {
         allItems
             .filter { $0.parentId == item.id }
             .filter { child in
+                // Filter by SQL search if active (takes precedence)
+                if store.sqlSearchActive {
+                    return store.matchesSQLSearch(child)
+                }
+
                 // Filter by tag if active (takes precedence over completed check)
                 if store.filteredByTag != nil {
                     return store.matchesTagFilter(child)
