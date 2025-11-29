@@ -308,7 +308,7 @@ class ItemRepository {
 
     // MARK: - SQL Query Execution
 
-    func executeSQLQuery(_ sql: String) throws -> [String] {
+    func executeSQLQuery(_ sql: String) async throws -> [String] {
         guard let queue = database.getQueue() else {
             throw DatabaseError.notInitialized
         }
@@ -325,21 +325,53 @@ class ItemRepository {
             throw DatabaseError.invalidQuery("Only SELECT queries are allowed. PRAGMA, ANALYZE, and other commands are not permitted.")
         }
 
-        // Use read transaction for additional read-only enforcement
-        // SQLite read transactions prevent all write operations including:
-        // INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, ATTACH, VACUUM
-        return try queue.read { db in
-            // Execute query and extract first column (id) from each row
-            let rows = try Row.fetchAll(db, sql: sql)
+        // Check for multiple statements (prevents "SELECT 1; PRAGMA ..." attacks)
+        // Count non-empty statements separated by semicolons
+        let statements = trimmedSQL.components(separatedBy: ";")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
 
-            var itemIds: [String] = []
-            for row in rows {
-                if let id = row[0] as? String {
-                    itemIds.append(id)
-                }
+        if statements.count > 1 {
+            throw DatabaseError.invalidQuery("Only single SELECT statements are allowed. Multiple statements are not permitted.")
+        }
+
+        // Execute query asynchronously with 250ms timeout
+        return try await withThrowingTaskGroup(of: [String].self) { group in
+            // Task 1: Execute the query
+            group.addTask {
+                try await Task.detached {
+                    try queue.read { db in
+                        // Execute query and extract first column (id) from each row
+                        // Read transaction prevents all write operations
+                        let rows = try Row.fetchAll(db, sql: sql)
+
+                        var itemIds: [String] = []
+                        for row in rows {
+                            if let id = row[0] as? String {
+                                itemIds.append(id)
+                            }
+                        }
+
+                        return itemIds
+                    }
+                }.value
             }
 
-            return itemIds
+            // Task 2: Timeout watchdog
+            group.addTask {
+                try await Task.sleep(nanoseconds: 250_000_000) // 250ms
+                throw DatabaseError.invalidQuery("Query timed out (>250ms)")
+            }
+
+            // Wait for first task to complete
+            guard let result = try await group.next() else {
+                throw DatabaseError.invalidQuery("Query execution failed")
+            }
+
+            // Cancel the other task
+            group.cancelAll()
+
+            return result
         }
     }
 }

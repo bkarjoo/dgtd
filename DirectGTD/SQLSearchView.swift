@@ -140,11 +140,12 @@ struct SQLSearchView: View {
             return
         }
 
-        store.executeSQLSearch(query: trimmedQuery) { result in
-            switch result {
-            case .success:
+        // Execute query asynchronously (runs off main thread with timeout)
+        Task {
+            do {
+                try await store.executeSQLSearch(query: trimmedQuery)
                 dismiss()
-            case .failure(let error):
+            } catch {
                 errorMessage = error.localizedDescription
             }
         }
@@ -166,15 +167,13 @@ struct SQLSearchView: View {
 
         guard !trimmedName.isEmpty else { return }
 
-        store.saveSQLSearch(name: trimmedName, sql: trimmedQuery) { result in
-            switch result {
-            case .success:
-                searchName = ""
-                // Run the query after saving
-                runQuery()
-            case .failure(let error):
-                errorMessage = error.localizedDescription
-            }
+        do {
+            try store.saveSQLSearch(name: trimmedName, sql: trimmedQuery)
+            searchName = ""
+            // Run the query after saving
+            runQuery()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }

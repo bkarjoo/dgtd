@@ -1138,21 +1138,18 @@ class ItemStore: ObservableObject {
         }
     }
 
-    func executeSQLSearch(query: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        do {
-            let itemIds = try repository.executeSQLQuery(query)
+    func executeSQLSearch(query: String) async throws {
+        // Execute query asynchronously (runs off main thread with timeout)
+        let itemIds = try await repository.executeSQLQuery(query)
 
-            // Update state
+        // Update state on main actor
+        await MainActor.run {
             sqlSearchQuery = query
             sqlSearchResults = itemIds
             sqlSearchActive = true
 
             // Clear tag filter (mutual exclusivity)
             filteredByTag = nil
-
-            completion(.success(()))
-        } catch {
-            completion(.failure(error))
         }
     }
 
@@ -1162,14 +1159,9 @@ class ItemStore: ObservableObject {
         sqlSearchResults = []
     }
 
-    func saveSQLSearch(name: String, sql: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        do {
-            let search = SavedSearch(name: name, sql: sql)
-            try repository.createSavedSearch(search)
-            loadSavedSearches()
-            completion(.success(()))
-        } catch {
-            completion(.failure(error))
-        }
+    func saveSQLSearch(name: String, sql: String) throws {
+        let search = SavedSearch(name: name, sql: sql)
+        try repository.createSavedSearch(search)
+        loadSavedSearches()
     }
 }
