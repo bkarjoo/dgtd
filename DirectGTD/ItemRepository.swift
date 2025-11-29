@@ -313,7 +313,19 @@ class ItemRepository {
             throw DatabaseError.notInitialized
         }
 
-        // Use read transaction for read-only enforcement
+        // Validate that query is a SELECT statement
+        let trimmedSQL = sql.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSQL.isEmpty else {
+            throw DatabaseError.invalidQuery("Query cannot be empty")
+        }
+
+        // Check if query starts with SELECT (case-insensitive)
+        let upperSQL = trimmedSQL.uppercased()
+        guard upperSQL.hasPrefix("SELECT") else {
+            throw DatabaseError.invalidQuery("Only SELECT queries are allowed. PRAGMA, ANALYZE, and other commands are not permitted.")
+        }
+
+        // Use read transaction for additional read-only enforcement
         // SQLite read transactions prevent all write operations including:
         // INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, ATTACH, VACUUM
         return try queue.read { db in

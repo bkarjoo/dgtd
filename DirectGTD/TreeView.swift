@@ -253,6 +253,12 @@ struct TreeView: View {
                 updateSelectionIfInvalid()
             }
         }
+        .onChange(of: store.sqlSearchResults) { oldValue, newValue in
+            // Update selection when SQL results change (e.g., user runs new query)
+            DispatchQueue.main.async {
+                updateSelectionIfInvalid()
+            }
+        }
         .onAppear {
             DispatchQueue.main.async {
                 store.loadItems()
