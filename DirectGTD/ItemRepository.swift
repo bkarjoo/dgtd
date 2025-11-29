@@ -328,10 +328,10 @@ class ItemRepository {
 
         // Check for multiple statements (skip semicolons in string literals)
         let semicolonCount = countSemicolonsOutsideStrings(trimmedSQL)
-        let hasTrailingSemicolon = trimmedSQL.hasSuffix(";")
 
-        // Allow 0 semicolons or 1 trailing semicolon only
-        if semicolonCount > 1 || (semicolonCount == 1 && !hasTrailingSemicolon) {
+        // Reject queries with more than 1 semicolon (multiple statements)
+        // Allow 0 or 1 semicolons (single statement, optionally with trailing ; or ; -- comment)
+        if semicolonCount > 1 {
             throw DatabaseError.invalidQuery("Only single SELECT statements are allowed. Multiple statements are not permitted.")
         }
 
@@ -342,10 +342,11 @@ class ItemRepository {
 
         let connectionBox = ConnectionBox()
 
-        // Result enum to distinguish success from timeout
+        // Result enum to distinguish success from timeout from other errors
         enum QueryResult {
             case success([String])
             case timeout
+            case error(Error)
         }
 
         // Execute query asynchronously with 250ms timeout and interrupt capability
@@ -371,8 +372,15 @@ class ItemRepository {
                     }
                     return .success(items)
                 } catch {
-                    // Query was interrupted or failed
-                    return .timeout
+                    // Check if this is an interrupt error (from timeout)
+                    // GRDB wraps SQLITE_INTERRUPT in DatabaseError
+                    let errorString = String(describing: error)
+                    if errorString.contains("interrupt") || errorString.contains("INTERRUPT") {
+                        return .timeout
+                    } else {
+                        // Return actual SQL errors (syntax, invalid column, etc.)
+                        return .error(error)
+                    }
                 }
             }
 
@@ -399,12 +407,15 @@ class ItemRepository {
             return firstResult
         }
 
-        // Check which task won the race
+        // Check which task won the race and handle appropriately
         switch result {
         case .success(let items):
             return items
         case .timeout:
             throw DatabaseError.invalidQuery("Query timed out (>250ms)")
+        case .error(let error):
+            // Re-throw actual SQL errors so users can see real error messages
+            throw error
         }
     }
 
