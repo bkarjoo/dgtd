@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import SQLite3
 
 class ItemRepository {
     private let database: DatabaseProvider
@@ -325,53 +326,70 @@ class ItemRepository {
             throw DatabaseError.invalidQuery("Only SELECT queries are allowed. PRAGMA, ANALYZE, and other commands are not permitted.")
         }
 
-        // Check for multiple statements (prevents "SELECT 1; PRAGMA ..." attacks)
-        // Count non-empty statements separated by semicolons
-        let statements = trimmedSQL.components(separatedBy: ";")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        if statements.count > 1 {
-            throw DatabaseError.invalidQuery("Only single SELECT statements are allowed. Multiple statements are not permitted.")
+        // Thread-safe box for storing connection handle for interrupt
+        final class ConnectionBox: @unchecked Sendable {
+            var connection: OpaquePointer?
         }
 
-        // Execute query asynchronously with 250ms timeout
+        let connectionBox = ConnectionBox()
+
+        // Execute query asynchronously with 250ms timeout and interrupt capability
         return try await withThrowingTaskGroup(of: [String].self) { group in
-            // Task 1: Execute the query
+            // Task 1: Execute the query (no Task.detached - runs in group's context)
             group.addTask {
-                try await Task.detached {
-                    try queue.read { db in
-                        // Execute query and extract first column (id) from each row
-                        // Read transaction prevents all write operations
-                        let rows = try Row.fetchAll(db, sql: sql)
+                try queue.read { db in
+                    // Store connection for potential interrupt
+                    connectionBox.connection = db.sqliteConnection
 
-                        var itemIds: [String] = []
-                        for row in rows {
-                            if let id = row[0] as? String {
-                                itemIds.append(id)
-                            }
+                    // Execute query and extract first column (id) from each row
+                    // Read transaction prevents all write operations
+                    // If interrupted, will throw GRDB error
+                    let rows = try Row.fetchAll(db, sql: sql)
+
+                    var itemIds: [String] = []
+                    for row in rows {
+                        if let id = row[0] as? String {
+                            itemIds.append(id)
                         }
-
-                        return itemIds
                     }
-                }.value
+
+                    return itemIds
+                }
             }
 
             // Task 2: Timeout watchdog
             group.addTask {
                 try await Task.sleep(nanoseconds: 250_000_000) // 250ms
+
+                // Interrupt the running SQLite query
+                if let connection = connectionBox.connection {
+                    sqlite3_interrupt(connection)
+                }
+
                 throw DatabaseError.invalidQuery("Query timed out (>250ms)")
             }
 
-            // Wait for first task to complete
-            guard let result = try await group.next() else {
-                throw DatabaseError.invalidQuery("Query execution failed")
+            do {
+                // Wait for first task to complete
+                guard let result = try await group.next() else {
+                    throw DatabaseError.invalidQuery("Query execution failed")
+                }
+
+                // Cancel the other task
+                group.cancelAll()
+
+                return result
+            } catch {
+                // Cancel remaining tasks
+                group.cancelAll()
+
+                // Re-throw as timeout if it's a database error (likely from interrupt)
+                if error is DatabaseError {
+                    throw error
+                }
+                // SQLite interrupt causes GRDB to throw - treat as timeout
+                throw DatabaseError.invalidQuery("Query timed out (>250ms)")
             }
-
-            // Cancel the other task
-            group.cancelAll()
-
-            return result
         }
     }
 }
