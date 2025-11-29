@@ -1,4 +1,52 @@
 import SwiftUI
+import AppKit
+
+// Custom TextEditor that disables smart quotes
+struct PlainTextEditor: NSViewRepresentable {
+    @Binding var text: String
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        let textView = scrollView.documentView as! NSTextView
+
+        // Disable smart quotes and other automatic substitutions
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+
+        // Set monospaced font
+        textView.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+
+        textView.delegate = context.coordinator
+        textView.string = text
+
+        return scrollView
+    }
+
+    func updateNSView(_ nsView: NSScrollView, context: Context) {
+        let textView = nsView.documentView as! NSTextView
+        if textView.string != text {
+            textView.string = text
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: PlainTextEditor
+
+        init(_ parent: PlainTextEditor) {
+            self.parent = parent
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            parent.text = textView.string
+        }
+    }
+}
 
 struct SQLSearchView: View {
     @ObservedObject var store: ItemStore
@@ -29,11 +77,9 @@ struct SQLSearchView: View {
                     .font(.subheadline)
                     .foregroundColor(.secondary)
 
-                TextEditor(text: $queryText)
-                    .font(.system(.body, design: .monospaced))
+                PlainTextEditor(text: $queryText)
                     .frame(height: 120)
                     .border(Color.gray.opacity(0.3))
-                    .autocorrectionDisabled()
 
                 if let error = errorMessage {
                     Text(error)
