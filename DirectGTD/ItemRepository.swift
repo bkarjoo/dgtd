@@ -326,6 +326,15 @@ class ItemRepository {
             throw DatabaseError.invalidQuery("Only SELECT queries are allowed. PRAGMA, ANALYZE, and other commands are not permitted.")
         }
 
+        // Check for multiple statements (skip semicolons in string literals)
+        let semicolonCount = countSemicolonsOutsideStrings(trimmedSQL)
+        let hasTrailingSemicolon = trimmedSQL.hasSuffix(";")
+
+        // Allow 0 semicolons or 1 trailing semicolon only
+        if semicolonCount > 1 || (semicolonCount == 1 && !hasTrailingSemicolon) {
+            throw DatabaseError.invalidQuery("Only single SELECT statements are allowed. Multiple statements are not permitted.")
+        }
+
         // Thread-safe box for storing connection handle for interrupt
         final class ConnectionBox: @unchecked Sendable {
             var connection: OpaquePointer?
@@ -333,27 +342,37 @@ class ItemRepository {
 
         let connectionBox = ConnectionBox()
 
+        // Result enum to distinguish success from timeout
+        enum QueryResult {
+            case success([String])
+            case timeout
+        }
+
         // Execute query asynchronously with 250ms timeout and interrupt capability
-        return try await withThrowingTaskGroup(of: [String].self) { group in
-            // Task 1: Execute the query (no Task.detached - runs in group's context)
+        let result = try await withThrowingTaskGroup(of: QueryResult.self) { group in
+            // Task 1: Execute the query
             group.addTask {
-                try queue.read { db in
-                    // Store connection for potential interrupt
-                    connectionBox.connection = db.sqliteConnection
+                do {
+                    let items = try queue.read { db in
+                        // Store connection for potential interrupt
+                        connectionBox.connection = db.sqliteConnection
 
-                    // Execute query and extract first column (id) from each row
-                    // Read transaction prevents all write operations
-                    // If interrupted, will throw GRDB error
-                    let rows = try Row.fetchAll(db, sql: sql)
+                        // Execute query and extract first column (id) from each row
+                        let rows = try Row.fetchAll(db, sql: sql)
 
-                    var itemIds: [String] = []
-                    for row in rows {
-                        if let id = row[0] as? String {
-                            itemIds.append(id)
+                        var itemIds: [String] = []
+                        for row in rows {
+                            if let id = row[0] as? String {
+                                itemIds.append(id)
+                            }
                         }
-                    }
 
-                    return itemIds
+                        return itemIds
+                    }
+                    return .success(items)
+                } catch {
+                    // Query was interrupted or failed
+                    return .timeout
                 }
             }
 
@@ -366,31 +385,63 @@ class ItemRepository {
                     sqlite3_interrupt(connection)
                 }
 
-                throw DatabaseError.invalidQuery("Query timed out (>250ms)")
+                return .timeout
             }
 
-            do {
-                // Wait for first task to complete
-                guard let result = try await group.next() else {
-                    throw DatabaseError.invalidQuery("Query execution failed")
-                }
-
-                // Cancel the other task
-                group.cancelAll()
-
-                return result
-            } catch {
-                // Cancel remaining tasks
-                group.cancelAll()
-
-                // Re-throw as timeout if it's a database error (likely from interrupt)
-                if error is DatabaseError {
-                    throw error
-                }
-                // SQLite interrupt causes GRDB to throw - treat as timeout
-                throw DatabaseError.invalidQuery("Query timed out (>250ms)")
+            // Wait for first task to complete
+            guard let firstResult = try await group.next() else {
+                throw DatabaseError.invalidQuery("Query execution failed")
             }
+
+            // Cancel the other task
+            group.cancelAll()
+
+            return firstResult
         }
+
+        // Check which task won the race
+        switch result {
+        case .success(let items):
+            return items
+        case .timeout:
+            throw DatabaseError.invalidQuery("Query timed out (>250ms)")
+        }
+    }
+
+    // Helper: Count semicolons outside of string literals
+    // SQLite uses single quotes for strings, doubled quotes for escaping
+    private func countSemicolonsOutsideStrings(_ sql: String) -> Int {
+        var inString = false
+        var semicolonCount = 0
+        var i = sql.startIndex
+
+        while i < sql.endIndex {
+            let char = sql[i]
+
+            if inString {
+                if char == "'" {
+                    // Check next character for escaped quote
+                    let next = sql.index(after: i)
+                    if next < sql.endIndex && sql[next] == "'" {
+                        // Doubled quote - skip both
+                        i = next
+                    } else {
+                        // End of string
+                        inString = false
+                    }
+                }
+            } else {
+                if char == "'" {
+                    inString = true
+                } else if char == ";" {
+                    semicolonCount += 1
+                }
+            }
+
+            i = sql.index(after: i)
+        }
+
+        return semicolonCount
     }
 }
 
