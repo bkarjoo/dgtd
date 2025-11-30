@@ -46,7 +46,8 @@ CREATE TABLE saved_searches (
     sql TEXT NOT NULL,
     sort_order INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL,
-    modified_at INTEGER NOT NULL
+    modified_at INTEGER NOT NULL,
+    show_ancestors INTEGER NOT NULL DEFAULT 1
 );
 
 -- Indexes for performance

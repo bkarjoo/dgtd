@@ -146,6 +146,25 @@ open class Database: DatabaseProvider {
             NSLog("Database: Migration v5 completed successfully")
         }
 
+        // Register v6 migration (add show_ancestors column to saved_searches)
+        migrator.registerMigration("v6") { db in
+            NSLog("Database: Running migration v6 (add show_ancestors column)")
+
+            // Check if column already exists (for databases created from updated schema.sql)
+            let columnExists = try db.columns(in: "saved_searches").contains { $0.name == "show_ancestors" }
+
+            if !columnExists {
+                try db.execute(sql: """
+                    ALTER TABLE saved_searches ADD COLUMN show_ancestors INTEGER NOT NULL DEFAULT 1
+                """)
+                NSLog("Database: Added show_ancestors column with default value 1")
+            } else {
+                NSLog("Database: show_ancestors column already exists, skipping")
+            }
+
+            NSLog("Database: Migration v6 completed successfully")
+        }
+
         // Handle backward compatibility: Detect legacy databases and reset them
         try queue.write { db in
             // State Detection Step 1: Check if grdb_migrations table exists

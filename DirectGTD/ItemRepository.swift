@@ -314,15 +314,19 @@ class ItemRepository {
             throw DatabaseError.notInitialized
         }
 
-        // Validate that query is a SELECT statement
+        // Normalize query text
         let trimmedSQL = sql.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedSQL.isEmpty else {
             throw DatabaseError.invalidQuery("Query cannot be empty")
         }
 
-        // Check if query starts with SELECT (case-insensitive)
-        let upperSQL = trimmedSQL.uppercased()
-        guard upperSQL.hasPrefix("SELECT") else {
+        // Determine first meaningful SQL keyword (ignoring comments/parentheses)
+        guard let firstKeyword = firstSQLKeyword(in: trimmedSQL)?.uppercased() else {
+            throw DatabaseError.invalidQuery("Unable to parse SQL query.")
+        }
+
+        // Allow SELECT or CTEs (WITH ... SELECT). Reject everything else (PRAGMA, etc.)
+        guard firstKeyword == "SELECT" || firstKeyword == "WITH" else {
             throw DatabaseError.invalidQuery("Only SELECT queries are allowed. PRAGMA, ANALYZE, and other commands are not permitted.")
         }
 
@@ -334,7 +338,21 @@ class ItemRepository {
 
         // Thread-safe box for storing connection handle for interrupt
         final class ConnectionBox: @unchecked Sendable {
-            var connection: OpaquePointer?
+            private let lock = NSLock()
+            private var connection: OpaquePointer?
+
+            func set(_ value: OpaquePointer?) {
+                lock.lock()
+                connection = value
+                lock.unlock()
+            }
+
+            func get() -> OpaquePointer? {
+                lock.lock()
+                let value = connection
+                lock.unlock()
+                return value
+            }
         }
 
         let connectionBox = ConnectionBox()
@@ -353,7 +371,7 @@ class ItemRepository {
                 do {
                     let items = try queue.read { db in
                         // Store connection for potential interrupt
-                        connectionBox.connection = db.sqliteConnection
+                        connectionBox.set(db.sqliteConnection)
 
                         // Execute query and extract first column (id) from each row
                         let rows = try Row.fetchAll(db, sql: sql)
@@ -386,7 +404,7 @@ class ItemRepository {
                 try await Task.sleep(nanoseconds: 250_000_000) // 250ms
 
                 // Interrupt the running SQLite query
-                if let connection = connectionBox.connection {
+                if let connection = connectionBox.get() {
                     sqlite3_interrupt(connection)
                 }
 
@@ -414,6 +432,87 @@ class ItemRepository {
             // Re-throw actual SQL errors so users can see real error messages
             throw error
         }
+    }
+
+    // Helper: Retrieve first meaningful SQL keyword (ignores whitespace, parentheses, and comments)
+    private func firstSQLKeyword(in sql: String) -> String? {
+        var i = sql.startIndex
+        var inLineComment = false
+        var inBlockComment = false
+
+        while i < sql.endIndex {
+            let char = sql[i]
+
+            if inLineComment {
+                if char == "\n" {
+                    inLineComment = false
+                }
+                i = sql.index(after: i)
+                continue
+            }
+
+            if inBlockComment {
+                if char == "*" {
+                    let next = sql.index(after: i)
+                    if next < sql.endIndex && sql[next] == "/" {
+                        inBlockComment = false
+                        i = sql.index(after: next)
+                        continue
+                    }
+                }
+                i = sql.index(after: i)
+                continue
+            }
+
+            if char.isWhitespace {
+                i = sql.index(after: i)
+                continue
+            }
+
+            if char == "-" {
+                let next = sql.index(after: i)
+                if next < sql.endIndex && sql[next] == "-" {
+                    inLineComment = true
+                    i = sql.index(after: next)
+                    continue
+                }
+            }
+
+            if char == "/" {
+                let next = sql.index(after: i)
+                if next < sql.endIndex && sql[next] == "*" {
+                    inBlockComment = true
+                    i = sql.index(after: next)
+                    continue
+                }
+            }
+
+            if char == "(" {
+                i = sql.index(after: i)
+                continue
+            }
+
+            // Extract keyword (letters/underscores)
+            if char.isLetter {
+                var end = i
+                while end < sql.endIndex {
+                    let nextChar = sql[end]
+                    if nextChar.isLetter || nextChar == "_" {
+                        end = sql.index(after: end)
+                    } else {
+                        break
+                    }
+                }
+                if end > i {
+                    return String(sql[i..<end])
+                }
+            }
+
+            // Non-letter token encountered
+            break
+        }
+
+        return nil
     }
 
     // Helper: Check if SQL contains multiple statements

@@ -164,6 +164,7 @@ struct SavedSearch: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var sortOrder: Int
     var createdAt: Int
     var modifiedAt: Int
+    var showAncestors: Bool
 
     static let databaseTableName = "saved_searches"
 
@@ -174,6 +175,7 @@ struct SavedSearch: Codable, FetchableRecord, PersistableRecord, Identifiable {
         case sortOrder = "sort_order"
         case createdAt = "created_at"
         case modifiedAt = "modified_at"
+        case showAncestors = "show_ancestors"
     }
 
     init(
@@ -182,7 +184,8 @@ struct SavedSearch: Codable, FetchableRecord, PersistableRecord, Identifiable {
         sql: String,
         sortOrder: Int = 0,
         createdAt: Int = Int(Date().timeIntervalSince1970),
-        modifiedAt: Int = Int(Date().timeIntervalSince1970)
+        modifiedAt: Int = Int(Date().timeIntervalSince1970),
+        showAncestors: Bool = true
     ) {
         self.id = id
         self.name = name
@@ -190,5 +193,6 @@ struct SavedSearch: Codable, FetchableRecord, PersistableRecord, Identifiable {
         self.sortOrder = sortOrder
         self.createdAt = createdAt
         self.modifiedAt = modifiedAt
+        self.showAncestors = showAncestors
     }
 }
