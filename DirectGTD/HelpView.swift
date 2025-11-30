@@ -23,7 +23,7 @@ struct HelpView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     ShortcutSection(title: "General") {
-                        ShortcutRow(keys: "Cmd+H", description: "Show this help screen")
+                        ShortcutRow(keys: "Cmd+?", description: "Show this help screen")
                         ShortcutRow(keys: "Cmd+R", description: "Refresh items from database")
                         ShortcutRow(keys: "Cmd+F", description: "Toggle text search")
                         ShortcutRow(keys: "Cmd+Shift+F", description: "Toggle focus mode")

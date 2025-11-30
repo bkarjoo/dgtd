@@ -120,7 +120,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .padding()
-                .help("Help (Cmd+H)")
+                .help("Help (Cmd+?)")
 
                 Button(action: { showingAddItem = true }) {
                     Image(systemName: "plus")
@@ -183,7 +183,7 @@ struct ContentView: View {
             store.undoManager = undoManager
         }
         .onKeyPress { keyPress in
-            if keyPress.key == KeyEquivalent("h") && keyPress.modifiers.contains(.command) {
+            if keyPress.key == KeyEquivalent("/") && keyPress.modifiers.contains(.command) && keyPress.modifiers.contains(.shift) {
                 showingHelp = true
                 return .handled
             }
