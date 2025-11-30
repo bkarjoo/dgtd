@@ -590,6 +590,7 @@ All settings **persist across sessions**.
 **Quick Workflows:**
 - Use **I** for rapid task capture without leaving context
 - Use **Cmd+F** to find anything instantly (scales to 1000+ items)
+- **SQL search** - Create saved searches for "Overdue", "Due Today", "Ready to Start" - one click filtering
 - **Filter by tag** - Click tag icon to see only items in a specific context (home, work, etc.)
 - **Tags for contexts** - Tag tasks with contexts (home, work, computer) for GTD workflow
 - **Date badges** - Scan for red (overdue), orange (due today), blue (deferred) at a glance
@@ -634,6 +635,7 @@ All settings **persist across sessions**.
 DirectGTD follows one principle: **Get out of your way.**
 
 **What we have:**
+- **SQL search** - Raw SQLite queries for power users who want ultimate control
 - **Due dates & start times** - Track deadlines and defer work with visual badges
 - **Tags** - Flexible, color-coded organization for GTD contexts
 - **Search** - Instant filtering to find anything
@@ -683,6 +685,15 @@ A: Due date = when it MUST be done (hard deadline). Earliest start = when you CA
 
 **Q: Do items with future start times disappear from the tree?**
 A: No! They stay visible with a blue badge. The badge reminds you they're deferred but keeps them in context with your hierarchy.
+
+**Q: What's the difference between text search (Cmd+F) and SQL search?**
+A: Text search finds items by title (simple, fast). SQL search filters by any criteria - dates, tags, completion status, item type, etc. (powerful, flexible).
+
+**Q: Do I need to know SQL to use SQL search?**
+A: No! Use the example queries provided and modify them. Copy "Overdue Tasks" and change the date to create "Due This Week." Most queries follow the same pattern.
+
+**Q: Can SQL search break my database?**
+A: No. SQL search only allows SELECT queries (read-only). You can't DELETE, UPDATE, or modify data. Queries also timeout after 250ms to prevent performance issues.
 
 **Q: How do I check off tasks with keyboard?**
 A: Press period (.) when a task is selected. No mouse needed!
@@ -757,6 +768,17 @@ Questions? Found a bug? Want to contribute?
 **Version 2.1** | Made for humans who type faster than they click (but can drag too)
 
 ### What's New in 2.1
+
+**🎉 SQL Search** - Ultimate power-user filtering!
+- **Raw SQLite queries** for maximum flexibility
+- **Saved searches** stored in database
+- **Example queries** for common patterns (overdue, due today, ready to start)
+- **Show ancestors toggle** - Context vs flat list
+- **SELECT-only** with 250ms timeout for security
+- **Schema reference** - Tables: items, tags, item_tags
+- **Monospaced editor** with disabled smart quotes
+- **Visual indicator** - Filled magnifying glass when active
+- **4 example queries** included (overdue, due today, ready, tagged items)
 
 **🎉 Due Dates & Start Times** - Track deadlines and defer work!
 - **Due dates** with date + time for hard deadlines
