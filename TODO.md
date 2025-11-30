@@ -43,46 +43,6 @@
   - Detect conflicts with existing/default shortcuts and provide inline warnings.
   - Include support for triggering shortcuts even when the search or template panel is not open, with visual feedback that the action ran.
 
-## SQL Search Mode Requirements
-
-- Scope: Replace SmartFolders entirely with a SQL-driven search mode that overlays the existing list, similar to the current tag filter; no new
-  item types or tree nodes.
-- Invocation & Indicator
-    - A magnifying-glass icon sits with the tag filter icon; clicking it enters search mode and opens the search dialog.
-    - While a search is active, the icon shows a filled blue background as the affordance that filtering is applied.
-    - Clicking the filled icon again reopens the dialog pre-populated with the active query so it can be tweaked or rerun.
-    - SQL search and tag filter are mutually exclusive: activating one clears the other.
-- Search Dialog
-    - Provides a multi-line monospaced SQL editor, Run button, Cancel button, and Clear button.
-    - Run executes the SQL, applies the results to the main list (same area used for tag filtering), and closes the dialog. Cancel closes the dialog
-      without changing mode. Clear exits search mode entirely, removes the filter, and closes the dialog.
-    - Errors from SQLite are surfaced inline with the message and line number when available.
-    - Dialog closes automatically after Run; click the filled icon to reopen and modify the query.
-- Saved Searches
-    - Dialog includes "Save Search…" button that captures a user-provided name + SQL, stored for later reuse; saving immediately runs the query
-      and closes the dialog.
-    - All saved searches are displayed as a clickable list below the SQL editor within the same dialog; clicking a saved search populates the
-      editor with its SQL (does not auto-run, allowing user to modify before clicking Run).
-    - Provide "Manage Saved Searches" under Settings next to "Manage Tags" for viewing, renaming, reordering, and deleting saved entries.
-- Storage
-    - Add a `saved_searches` table: `id` TEXT PK, `name` TEXT NOT NULL, `sql` TEXT NOT NULL, `sort_order` INTEGER, timestamps.
-    - Persist the active ad-hoc search (if any) in app settings so a relaunch can restore it with the icon highlighted.
-- Query Execution
-    - Raw SQL is executed exactly as entered but must be read-only:
-        - Reject anything that isn't a single SELECT statement; disallow multiple statements, ATTACH, PRAGMA writes, or DDL/DML.
-        - Execute via a dedicated read-only connection/context with a short timeout (~250 ms) so pathological queries cannot freeze the UI.
-        - Provide documented helpers (strftime, etc.) instead of bound parameters; we rely on users writing valid SQLite syntax.
-    - The query's first column must be `id` values from `items`; extra columns are ignored.
-    - Results populate the same list view used elsewhere, so standard selection/edit commands continue to operate on the returned items.
-- UX Parity with Tag Filter
-    - Search mode behaves like tag filtering: selecting rows shows filtered results, and leaving search mode returns to the previous list.
-    - Only one saved search (or the ad-hoc editor contents) can be active at any time; no multi-select.
-- Testing
-    - Unit coverage for read-only enforcement, timeout behavior, SQL error surfacing, saved-search CRUD, and persistence of the active query.
-    - Integration test to ensure toggling the icon, running a query, clearing it, and switching between saved searches works along with tag filters.
-- Docs
-    - Update help/README to explain SQL search mode, how to invoke it, how to save/manage searches, and reiterate the SELECT-only rule.
-
 ## Search Query Help Reference
 
 ### Available Tables
