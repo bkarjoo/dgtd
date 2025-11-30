@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var showingSettings = false
     @State private var showingTagFilter = false
     @State private var showingSQLSearch = false
+    @State private var showingHelp = false
     @State private var rightPaneView: RightPaneView = .noteEditor
     @Environment(\.undoManager) var undoManager
 
@@ -114,6 +115,13 @@ struct ContentView: View {
 
                 Spacer()
 
+                Button(action: { showingHelp = true }) {
+                    Image(systemName: "questionmark.circle")
+                }
+                .buttonStyle(.plain)
+                .padding()
+                .help("Help (Cmd+H)")
+
                 Button(action: { showingAddItem = true }) {
                     Image(systemName: "plus")
                 }
@@ -158,6 +166,9 @@ struct ContentView: View {
         .sheet(isPresented: $showingSQLSearch) {
             SQLSearchView(store: store)
         }
+        .sheet(isPresented: $showingHelp) {
+            HelpView()
+        }
         .alert("Error", isPresented: Binding(
             get: { store.errorMessage != nil },
             set: { if !$0 { store.errorMessage = nil } }
@@ -172,6 +183,10 @@ struct ContentView: View {
             store.undoManager = undoManager
         }
         .onKeyPress { keyPress in
+            if keyPress.key == KeyEquivalent("h") && keyPress.modifiers.contains(.command) {
+                showingHelp = true
+                return .handled
+            }
             if keyPress.key == KeyEquivalent("f") && keyPress.modifiers.contains(.command) {
                 // Cmd+Shift+F: Toggle focus mode
                 if keyPress.modifiers.contains(.shift) {
