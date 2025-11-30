@@ -55,7 +55,6 @@ struct SQLSearchView: View {
     @State private var errorMessage: String?
     @State private var showingSaveDialog: Bool = false
     @State private var searchName: String = ""
-    @State private var showAncestors: Bool = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,9 +80,6 @@ struct SQLSearchView: View {
                 PlainTextEditor(text: $queryText)
                     .frame(height: 120)
                     .border(Color.gray.opacity(0.3))
-
-                Toggle("Show ancestors", isOn: $showAncestors)
-                    .padding(.top, 8)
 
                 if let error = errorMessage {
                     Text(error)
@@ -167,7 +163,6 @@ struct SQLSearchView: View {
         .frame(width: 600, height: 500)
         .onAppear {
             queryText = store.sqlSearchQuery
-            showAncestors = store.sqlSearchShowAncestors
             store.loadSavedSearches()
         }
         .alert("Save Search", isPresented: $showingSaveDialog) {
@@ -195,7 +190,7 @@ struct SQLSearchView: View {
         // Execute query asynchronously (runs off main thread with timeout)
         Task {
             do {
-                try await store.executeSQLSearch(query: trimmedQuery, showAncestors: showAncestors)
+                try await store.executeSQLSearch(query: trimmedQuery)
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
@@ -210,7 +205,6 @@ struct SQLSearchView: View {
 
     private func loadSavedSearch(_ search: SavedSearch) {
         queryText = search.sql
-        showAncestors = search.showAncestors
         errorMessage = nil
     }
 
@@ -221,7 +215,7 @@ struct SQLSearchView: View {
         guard !trimmedName.isEmpty else { return }
 
         do {
-            try store.saveSQLSearch(name: trimmedName, sql: trimmedQuery, showAncestors: showAncestors)
+            try store.saveSQLSearch(name: trimmedName, sql: trimmedQuery)
             searchName = ""
             // Run the query after saving
             runQuery()

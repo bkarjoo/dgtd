@@ -28,7 +28,6 @@ class ItemStore: ObservableObject {
     @Published var sqlSearchActive: Bool = false
     @Published var sqlSearchQuery: String = ""
     @Published var sqlSearchResults: [String] = [] // Item IDs from SQL query
-    @Published var sqlSearchShowAncestors: Bool = true
     @Published var showingSQLSearch: Bool = false
     @Published private(set) var savedSearches: [SavedSearch] = []
     private let repository: ItemRepository
@@ -961,8 +960,12 @@ class ItemStore: ObservableObject {
         }
 
         // Check if any descendant is in the SQL search results (show parents of matching items)
-        // Only if showAncestors is enabled
-        if sqlSearchShowAncestors && hasDescendantInSQLResults(item, allItems: items) {
+        if hasDescendantInSQLResults(item, allItems: items) {
+            return true
+        }
+
+        // Check if any ancestor is in the SQL search results (show descendants of matching items)
+        if hasAncestorInSQLResults(item, allItems: items) {
             return true
         }
 
@@ -976,6 +979,20 @@ class ItemStore: ObservableObject {
                 return true
             }
         }
+        return false
+    }
+
+    func hasAncestorInSQLResults(_ item: Item, allItems: [Item]) -> Bool {
+        var currentParentId = item.parentId
+
+        while let parentId = currentParentId {
+            if sqlSearchResults.contains(parentId) {
+                return true
+            }
+
+            currentParentId = allItems.first(where: { $0.id == parentId })?.parentId
+        }
+
         return false
     }
 
@@ -1140,7 +1157,7 @@ class ItemStore: ObservableObject {
         }
     }
 
-    func executeSQLSearch(query: String, showAncestors: Bool = true) async throws {
+    func executeSQLSearch(query: String) async throws {
         // Execute query asynchronously (runs off main thread with timeout)
         let itemIds = try await repository.executeSQLQuery(query)
 
@@ -1148,7 +1165,6 @@ class ItemStore: ObservableObject {
         await MainActor.run {
             sqlSearchQuery = query
             sqlSearchResults = itemIds
-            sqlSearchShowAncestors = showAncestors
             sqlSearchActive = true
 
             // Clear tag filter (mutual exclusivity)
@@ -1162,8 +1178,8 @@ class ItemStore: ObservableObject {
         sqlSearchResults = []
     }
 
-    func saveSQLSearch(name: String, sql: String, showAncestors: Bool = true) throws {
-        let search = SavedSearch(name: name, sql: sql, showAncestors: showAncestors)
+    func saveSQLSearch(name: String, sql: String) throws {
+        let search = SavedSearch(name: name, sql: sql)
         try repository.createSavedSearch(search)
         loadSavedSearches()
     }

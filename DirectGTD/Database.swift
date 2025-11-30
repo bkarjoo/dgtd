@@ -165,6 +165,38 @@ open class Database: DatabaseProvider {
             NSLog("Database: Migration v6 completed successfully")
         }
 
+        // Register v7 migration (remove show_ancestors column)
+        migrator.registerMigration("v7") { db in
+            NSLog("Database: Running migration v7 (remove show_ancestors column)")
+
+            let columnExists = try db.columns(in: "saved_searches").contains { $0.name == "show_ancestors" }
+            guard columnExists else {
+                NSLog("Database: show_ancestors column already removed, skipping")
+                return
+            }
+
+            try db.execute(sql: """
+                CREATE TABLE saved_searches_new (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    sql TEXT NOT NULL,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    modified_at INTEGER NOT NULL
+                )
+            """)
+
+            try db.execute(sql: """
+                INSERT INTO saved_searches_new (id, name, sql, sort_order, created_at, modified_at)
+                SELECT id, name, sql, sort_order, created_at, modified_at FROM saved_searches
+            """)
+
+            try db.execute(sql: "DROP TABLE saved_searches")
+            try db.execute(sql: "ALTER TABLE saved_searches_new RENAME TO saved_searches")
+
+            NSLog("Database: Migration v7 completed successfully")
+        }
+
         // Handle backward compatibility: Detect legacy databases and reset them
         try queue.write { db in
             // State Detection Step 1: Check if grdb_migrations table exists

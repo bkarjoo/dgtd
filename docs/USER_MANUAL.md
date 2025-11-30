@@ -429,6 +429,99 @@ Hit **Cmd+F** to search your entire item list.
 
 ---
 
+## SQL Search (Power Users)
+
+**Query your data with raw SQL for ultimate flexibility.**
+
+SQL Search lets you create custom filters using SQLite queries. Perfect for power users who want complete control over what they see.
+
+**Opening SQL Search:**
+- Click the **magnifying glass icon** in toolbar
+- SQL search dialog opens with editor and saved searches
+
+**Creating a Query:**
+1. Type SQL query in the editor (monospaced, no smart quotes)
+2. Click **Run** (or Cmd+Return) to execute
+3. Results appear in tree view
+4. Click **Clear** to exit SQL search mode
+
+**Saving Searches:**
+1. Write your query
+2. Click **Save Search...**
+3. Give it a name (e.g., "Overdue Tasks")
+4. Access saved searches from the list in the dialog
+
+**Show Ancestors Toggle:**
+- **Enabled** (default): Shows matching items plus all their ancestors for context
+- **Disabled**: Shows only exact matches (flat list)
+
+**Visual Indicator:**
+- Magnifying glass icon becomes **filled** when SQL search is active
+- Shows which filter is currently applied
+
+**Example Queries:**
+
+**Overdue Tasks:**
+```sql
+SELECT id FROM items
+WHERE item_type = 'Task'
+  AND completed_at IS NULL
+  AND due_date < strftime('%s', 'now')
+ORDER BY due_date ASC
+```
+
+**Due Today:**
+```sql
+SELECT id FROM items
+WHERE item_type = 'Task'
+  AND completed_at IS NULL
+  AND date(due_date, 'unixepoch') = date('now')
+ORDER BY due_date ASC
+```
+
+**Ready to Start:**
+```sql
+SELECT id FROM items
+WHERE item_type = 'Task'
+  AND completed_at IS NULL
+  AND (earliest_start_time IS NULL
+       OR earliest_start_time <= strftime('%s', 'now'))
+ORDER BY due_date ASC
+```
+
+**Items with Specific Tag:**
+```sql
+SELECT i.id FROM items i
+JOIN item_tags it ON i.id = it.item_id
+JOIN tags t ON it.tag_id = t.id
+WHERE t.name = 'Important'
+ORDER BY i.modified_at DESC
+```
+
+**Available Tables:**
+
+- **items** - id, title, item_type, notes, parent_id, sort_order, created_at, modified_at, completed_at, due_date, earliest_start_time
+- **tags** - id, name, color
+- **item_tags** - item_id, tag_id
+
+**Date/Time Helpers:**
+- Current time: `strftime('%s', 'now')`
+- Today: `date(due_date, 'unixepoch') = date('now')`
+- Next 7 days: `strftime('%s', 'now', '+7 days')`
+
+**Security:**
+- **SELECT only** - No DELETE, UPDATE, INSERT, or DROP allowed
+- **250ms timeout** - Queries are killed if they take too long
+- **Read-only** - Cannot modify your data via SQL
+
+**Pro tip:** Start with the example queries and modify them. SQL search excels at complex filters like "untagged tasks without notes created this week."
+
+*[Screenshot: SQL search dialog with query and saved searches]*
+
+*[Screenshot: SQL search results in tree view]*
+
+---
+
 ## Undo/Redo
 
 **Never fear making mistakes.**

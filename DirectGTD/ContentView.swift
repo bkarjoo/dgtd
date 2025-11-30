@@ -127,7 +127,6 @@ struct ContentView: View {
                     SearchResultsView(store: store)
                         .frame(minWidth: 200, idealWidth: 300, maxWidth: .infinity)
                 } else {
-                    // TreeView filters by SQL search via shouldShowItem (like tag filter)
                     TreeView(store: store, settings: settings)
                         .frame(minWidth: 200, idealWidth: 300, maxWidth: .infinity)
                 }
