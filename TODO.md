@@ -1,5 +1,9 @@
 # TODO
 
+## Bugs
+
+- **Focus mode item creation issue**: When a folder is focused and you use a shortcut key (T, N, F, P, E) to create a new item, the newly created item is not visible in the focused view. The item is created with its name field in editing mode (blinking cursor), but it's outside the focused subtree. While in this state, keyboard shortcuts don't work and give error beeps (including arrow keys). The user must unfocus to see the created item and regain keyboard functionality.
+
 ## Distribution
 
 - Create proper .dmg installer for macOS
