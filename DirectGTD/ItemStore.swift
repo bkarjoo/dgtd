@@ -523,11 +523,13 @@ class ItemStore: ObservableObject {
     }
 
     func createItemAfterSelected(withType itemType: ItemType = .unknown) {
-        let newItem = Item(title: "", itemType: itemType)
-
         // Find selected item to determine positioning
         if let selectedId = selectedItemId,
            let selectedItem = items.first(where: { $0.id == selectedId }) {
+
+            // If no type specified, use the same type as the selected item
+            let typeToCreate = itemType == .unknown ? selectedItem.itemType : itemType
+            let newItem = Item(title: "", itemType: typeToCreate)
 
             // New item gets same parent as selected item
             var itemToCreate = newItem
@@ -551,7 +553,8 @@ class ItemStore: ObservableObject {
                 print("Error creating item after selected: \(error)")
             }
         } else {
-            // No selection - create as first root item
+            // No selection - create as first root item with unknown type
+            let newItem = Item(title: "", itemType: itemType)
             var itemToCreate = newItem
             itemToCreate.sortOrder = 0
 
