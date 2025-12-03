@@ -636,30 +636,8 @@ class ItemStore: ObservableObject {
         guard let currentIndex = orderedItems.firstIndex(where: { $0.id == selectedId }),
               currentIndex > 0 else { return }
 
-        // Get current item's level (depth)
-        func getLevel(_ item: Item) -> Int {
-            var level = 0
-            var currentParentId = item.parentId
-            while let parentId = currentParentId {
-                level += 1
-                currentParentId = items.first(where: { $0.id == parentId })?.parentId
-            }
-            return level
-        }
-
-        let currentLevel = getLevel(selectedItem)
-
-        // Find the first item above that has the same level
-        var newParent: Item?
-        for i in stride(from: currentIndex - 1, through: 0, by: -1) {
-            let itemAbove = orderedItems[i]
-            if getLevel(itemAbove) == currentLevel {
-                newParent = itemAbove
-                break
-            }
-        }
-
-        guard let parent = newParent else { return }
+        // Use the immediately previous item as the new parent
+        let parent = orderedItems[currentIndex - 1]
 
         // Make selected item a child of that item
         var updatedItem = selectedItem
