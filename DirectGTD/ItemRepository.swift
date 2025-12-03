@@ -196,6 +196,34 @@ class ItemRepository {
         }
     }
 
+    /// Atomically duplicates items: shifts siblings, creates new items, and copies tags in a single transaction
+    func duplicateItems(siblingsToUpdate: [Item], newItems: [Item], itemTags: [ItemTag]) throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        let now = Int(Date().timeIntervalSince1970)
+
+        try dbQueue.write { db in
+            // Update siblings' sort order (with updated modifiedAt to match repository.update behavior)
+            for sibling in siblingsToUpdate {
+                var updatedSibling = sibling
+                updatedSibling.modifiedAt = now
+                try updatedSibling.update(db)
+            }
+
+            // Create all new items
+            for item in newItems {
+                try item.insert(db)
+            }
+
+            // Create all tag relationships
+            for itemTag in itemTags {
+                try itemTag.insert(db)
+            }
+        }
+    }
+
     // MARK: - App Settings
 
     func getSetting(key: String) throws -> String? {

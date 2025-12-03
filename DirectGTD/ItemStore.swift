@@ -629,12 +629,25 @@ class ItemStore: ObservableObject {
     }
 
     func indentItem() {
+        NSLog("=== indentItem() called ===")
         guard let selectedId = selectedItemId,
-              let selectedItem = items.first(where: { $0.id == selectedId }) else { return }
+              let selectedItem = items.first(where: { $0.id == selectedId }) else {
+            NSLog("indentItem: no selected item")
+            return
+        }
+
+        NSLog("indentItem: selectedItem.id=\(selectedItem.id), title='\(selectedItem.title ?? "untitled")', parentId=\(selectedItem.parentId ?? "nil")")
 
         let orderedItems = getAllItemsInOrder()
+        NSLog("indentItem: getAllItemsInOrder returned \(orderedItems.count) items")
+
         guard let currentIndex = orderedItems.firstIndex(where: { $0.id == selectedId }),
-              currentIndex > 0 else { return }
+              currentIndex > 0 else {
+            NSLog("indentItem: item not found in ordered list or is first item - returning")
+            return
+        }
+
+        NSLog("indentItem: currentIndex=\(currentIndex)")
 
         // Get current item's level (depth)
         func getLevel(_ item: Item) -> Int {
@@ -648,18 +661,24 @@ class ItemStore: ObservableObject {
         }
 
         let currentLevel = getLevel(selectedItem)
+        NSLog("indentItem: currentLevel=\(currentLevel)")
 
-        // Find the first item above that has the same level
+        // Find the first item above that is an actual sibling (same parent)
         var newParent: Item?
         for i in stride(from: currentIndex - 1, through: 0, by: -1) {
             let itemAbove = orderedItems[i]
-            if getLevel(itemAbove) == currentLevel {
+            // Check if this item is an actual sibling (same parent)
+            if itemAbove.parentId == selectedItem.parentId {
                 newParent = itemAbove
+                NSLog("indentItem: found actual sibling at index \(i): '\(itemAbove.title ?? "untitled")' (same parent)")
                 break
             }
         }
 
-        guard let parent = newParent else { return }
+        guard let parent = newParent else {
+            NSLog("indentItem: NO sibling with same parent found - returning without changes")
+            return
+        }
 
         // Make selected item a child of that item
         var updatedItem = selectedItem
@@ -678,6 +697,177 @@ class ItemStore: ObservableObject {
             loadItems()
         } catch {
             print("Error indenting item: \(error)")
+        }
+    }
+
+    // MARK: - Duplicate Item
+
+    /// Shallow copy: duplicates the selected item and its immediate children only
+    func duplicateItemShallow() {
+        guard let selectedId = selectedItemId,
+              let selectedItem = items.first(where: { $0.id == selectedId }) else { return }
+
+        let now = Int(Date().timeIntervalSince1970)
+
+        // Prepare siblings to update (shift sort order)
+        var siblingsToUpdate: [Item] = []
+        for sibling in items.filter({ $0.parentId == selectedItem.parentId && $0.sortOrder > selectedItem.sortOrder }) {
+            var updated = sibling
+            updated.sortOrder += 1
+            siblingsToUpdate.append(updated)
+        }
+
+        // Create the new parent item
+        let newItem = Item(
+            title: selectedItem.title,
+            itemType: selectedItem.itemType,
+            notes: selectedItem.notes,
+            parentId: selectedItem.parentId,
+            sortOrder: selectedItem.sortOrder + 1,
+            createdAt: now,
+            modifiedAt: now,
+            completedAt: nil,
+            dueDate: selectedItem.dueDate,
+            earliestStartTime: selectedItem.earliestStartTime
+        )
+
+        // Prepare all new items (parent + children)
+        var newItems: [Item] = [newItem]
+        var newItemTags: [ItemTag] = []
+
+        // Copy immediate children (one level deep)
+        let children = items.filter { $0.parentId == selectedId }.sorted { $0.sortOrder < $1.sortOrder }
+        for child in children {
+            let newChildId = UUID().uuidString
+
+            let childCopy = Item(
+                id: newChildId,
+                title: child.title,
+                itemType: child.itemType,
+                notes: child.notes,
+                parentId: newItem.id,
+                sortOrder: child.sortOrder,
+                createdAt: now,
+                modifiedAt: now,
+                completedAt: nil,
+                dueDate: child.dueDate,
+                earliestStartTime: child.earliestStartTime
+            )
+            newItems.append(childCopy)
+
+            // Copy tags for this child
+            let childTags = getTagsForItem(itemId: child.id)
+            for tag in childTags {
+                newItemTags.append(ItemTag(itemId: newChildId, tagId: tag.id))
+            }
+        }
+
+        // Copy tags for the parent item
+        let parentTags = getTagsForItem(itemId: selectedId)
+        for tag in parentTags {
+            newItemTags.append(ItemTag(itemId: newItem.id, tagId: tag.id))
+        }
+
+        // Execute everything in a single transaction
+        do {
+            try repository.duplicateItems(siblingsToUpdate: siblingsToUpdate, newItems: newItems, itemTags: newItemTags)
+
+            registerCreationUndo(for: newItem.id)
+            loadItems()
+            selectedItemId = newItem.id
+
+            // Expand the new item if it has children
+            if !children.isEmpty {
+                settings.expandedItemIds.insert(newItem.id)
+            }
+        } catch {
+            print("Error duplicating item (shallow): \(error)")
+        }
+    }
+
+    /// Deep copy: duplicates the selected item and all descendants recursively
+    func duplicateItemDeep() {
+        guard let selectedId = selectedItemId,
+              let selectedItem = items.first(where: { $0.id == selectedId }) else { return }
+
+        let now = Int(Date().timeIntervalSince1970)
+
+        // Prepare siblings to update (shift sort order)
+        var siblingsToUpdate: [Item] = []
+        for sibling in items.filter({ $0.parentId == selectedItem.parentId && $0.sortOrder > selectedItem.sortOrder }) {
+            var updated = sibling
+            updated.sortOrder += 1
+            siblingsToUpdate.append(updated)
+        }
+
+        // Map from old ID to new ID for maintaining parent-child relationships
+        var idMapping: [String: String] = [:]
+
+        // Collect entire subtree
+        let subtree = collectSubtree(itemId: selectedId)
+
+        // Prepare all new items and tags
+        var newItems: [Item] = []
+        var newItemTags: [ItemTag] = []
+        var expandedNewIds: Set<String> = []
+
+        for originalItem in subtree {
+            let newId = UUID().uuidString
+            idMapping[originalItem.id] = newId
+
+            // Determine new parent ID
+            let newParentId: String?
+            if originalItem.id == selectedId {
+                // Root of subtree keeps original parent
+                newParentId = selectedItem.parentId
+            } else if let oldParentId = originalItem.parentId, let mappedParentId = idMapping[oldParentId] {
+                newParentId = mappedParentId
+            } else {
+                newParentId = originalItem.parentId
+            }
+
+            let newItem = Item(
+                id: newId,
+                title: originalItem.title,
+                itemType: originalItem.itemType,
+                notes: originalItem.notes,
+                parentId: newParentId,
+                sortOrder: originalItem.id == selectedId ? selectedItem.sortOrder + 1 : originalItem.sortOrder,
+                createdAt: now,
+                modifiedAt: now,
+                completedAt: nil,
+                dueDate: originalItem.dueDate,
+                earliestStartTime: originalItem.earliestStartTime
+            )
+            newItems.append(newItem)
+
+            // Copy tags for this item
+            let originalTags = getTagsForItem(itemId: originalItem.id)
+            for tag in originalTags {
+                newItemTags.append(ItemTag(itemId: newId, tagId: tag.id))
+            }
+
+            // Track which items should be expanded
+            if settings.expandedItemIds.contains(originalItem.id) {
+                expandedNewIds.insert(newId)
+            }
+        }
+
+        // Execute everything in a single transaction
+        do {
+            try repository.duplicateItems(siblingsToUpdate: siblingsToUpdate, newItems: newItems, itemTags: newItemTags)
+
+            let newRootId = idMapping[selectedId]!
+            registerCreationUndo(for: newRootId)
+            loadItems()
+            selectedItemId = newRootId
+
+            // Apply expansion state after successful commit
+            for id in expandedNewIds {
+                settings.expandedItemIds.insert(id)
+            }
+        } catch {
+            print("Error duplicating item (deep): \(error)")
         }
     }
 

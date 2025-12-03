@@ -23,7 +23,7 @@ struct HelpView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     ShortcutSection(title: "General") {
-                        ShortcutRow(keys: "Cmd+?", description: "Show this help screen")
+                        ShortcutRow(keys: "Cmd+/", description: "Show this help screen")
                         ShortcutRow(keys: "Cmd+R", description: "Refresh items from database")
                         ShortcutRow(keys: "Cmd+F", description: "Toggle text search")
                         ShortcutRow(keys: "Cmd+Shift+F", description: "Toggle focus mode")
@@ -42,6 +42,8 @@ struct HelpView: View {
                         ShortcutRow(keys: "Delete", description: "Delete selected item")
                         ShortcutRow(keys: "Tab", description: "Indent item (make it a child)")
                         ShortcutRow(keys: "Shift+Tab", description: "Outdent item (promote to sibling)")
+                        ShortcutRow(keys: "Cmd+C", description: "Duplicate item (shallow - item + children)")
+                        ShortcutRow(keys: "Cmd+Shift+C", description: "Duplicate item (deep - entire subtree)")
                         ShortcutRow(keys: "Cmd+E", description: "Edit notes (switch to note editor)")
                     }
 

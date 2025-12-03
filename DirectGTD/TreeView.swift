@@ -230,6 +230,22 @@ struct TreeView: View {
                     }
                 }
                 return .handled
+            case KeyEquivalent("c"), KeyEquivalent("C"):
+                if keyPress.modifiers.contains(.command) {
+                    if keyPress.modifiers.contains(.shift) {
+                        // Cmd+Shift+C: Deep copy (entire subtree)
+                        DispatchQueue.main.async {
+                            store.duplicateItemDeep()
+                        }
+                    } else {
+                        // Cmd+C: Shallow copy (item + immediate children)
+                        DispatchQueue.main.async {
+                            store.duplicateItemShallow()
+                        }
+                    }
+                    return .handled
+                }
+                return .ignored
             default:
                 NSLog("unhandled key: \(String(describing: keyPress.key)) modifiers=\(keyPress.modifiers)")
                 return .ignored
