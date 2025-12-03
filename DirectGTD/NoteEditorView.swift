@@ -86,6 +86,16 @@ struct NoteEditorView: View {
         .onChange(of: store.selectedItemId) { _, _ in
             loadNotes()
         }
+        .onKeyPress { keyPress in
+            if keyPress.key == KeyEquivalent("e") && keyPress.modifiers.contains(.command) {
+                // Cmd+E: Enter edit mode
+                if mode == .preview {
+                    mode = .edit
+                }
+                return .handled
+            }
+            return .ignored
+        }
     }
 
     private func loadNotes() {

@@ -177,6 +177,14 @@ struct ContentView: View {
             store.undoManager = undoManager
         }
         .onKeyPress { keyPress in
+            if keyPress.key == KeyEquivalent("e") && keyPress.modifiers.contains(.command) {
+                // Cmd+E: Switch to note editor and enter edit mode
+                if rightPaneView != .noteEditor {
+                    rightPaneView = .noteEditor
+                }
+                // NoteEditorView will handle entering edit mode via its own onKeyPress
+                return .handled
+            }
             if keyPress.key == KeyEquivalent("/") && keyPress.modifiers.contains(.command) && keyPress.modifiers.contains(.shift) {
                 showingHelp = true
                 return .handled

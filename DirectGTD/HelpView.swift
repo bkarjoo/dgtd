@@ -42,6 +42,7 @@ struct HelpView: View {
                         ShortcutRow(keys: "Delete", description: "Delete selected item")
                         ShortcutRow(keys: "Tab", description: "Indent item (make it a child)")
                         ShortcutRow(keys: "Shift+Tab", description: "Outdent item (promote to sibling)")
+                        ShortcutRow(keys: "Cmd+E", description: "Edit notes (switch to note editor)")
                     }
 
                     ShortcutSection(title: "Create Items") {
