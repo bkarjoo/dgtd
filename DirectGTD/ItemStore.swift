@@ -629,12 +629,26 @@ class ItemStore: ObservableObject {
     }
 
     func indentItem() {
+        NSLog("indentItem() called")
         guard let selectedId = selectedItemId,
-              let selectedItem = items.first(where: { $0.id == selectedId }) else { return }
+              let selectedItem = items.first(where: { $0.id == selectedId }) else {
+            NSLog("indentItem: no selected item")
+            return
+        }
+
+        NSLog("indentItem: selectedItem.id=\(selectedItem.id), title=\(selectedItem.title ?? "untitled"), parentId=\(selectedItem.parentId ?? "nil")")
+        NSLog("indentItem: focusedItemId=\(focusedItemId ?? "nil")")
 
         let orderedItems = getAllItemsInOrder()
+        NSLog("indentItem: getAllItemsInOrder returned \(orderedItems.count) items")
+
         guard let currentIndex = orderedItems.firstIndex(where: { $0.id == selectedId }),
-              currentIndex > 0 else { return }
+              currentIndex > 0 else {
+            NSLog("indentItem: selected item not found in ordered list or is first item")
+            return
+        }
+
+        NSLog("indentItem: currentIndex=\(currentIndex)")
 
         // Get current item's level (depth)
         func getLevel(_ item: Item) -> Int {
@@ -648,18 +662,25 @@ class ItemStore: ObservableObject {
         }
 
         let currentLevel = getLevel(selectedItem)
+        NSLog("indentItem: currentLevel=\(currentLevel)")
 
         // Find the first item above that has the same level
         var newParent: Item?
         for i in stride(from: currentIndex - 1, through: 0, by: -1) {
             let itemAbove = orderedItems[i]
-            if getLevel(itemAbove) == currentLevel {
+            let aboveLevel = getLevel(itemAbove)
+            NSLog("indentItem: checking item at index \(i): title=\(itemAbove.title ?? "untitled"), level=\(aboveLevel)")
+            if aboveLevel == currentLevel {
                 newParent = itemAbove
+                NSLog("indentItem: found same-level item: \(itemAbove.title ?? "untitled")")
                 break
             }
         }
 
-        guard let parent = newParent else { return }
+        guard let parent = newParent else {
+            NSLog("indentItem: NO same-level item found above selected item - returning early (NO-OP)")
+            return
+        }
 
         // Make selected item a child of that item
         var updatedItem = selectedItem
@@ -812,7 +833,15 @@ class ItemStore: ObservableObject {
 
     private func getAllItemsInOrder() -> [Item] {
         var result: [Item] = []
-        let rootItems = items.filter { $0.parentId == nil }.sorted { $0.sortOrder < $1.sortOrder }
+
+        // In focus mode, start from the focused item instead of all roots
+        let rootItems: [Item]
+        if let focusedId = focusedItemId,
+           let focusedItem = items.first(where: { $0.id == focusedId }) {
+            rootItems = [focusedItem]
+        } else {
+            rootItems = items.filter { $0.parentId == nil }.sorted { $0.sortOrder < $1.sortOrder }
+        }
 
         func collectItems(_ items: [Item]) {
             for item in items {
