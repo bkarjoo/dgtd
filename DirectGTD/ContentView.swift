@@ -7,11 +7,6 @@
 
 import SwiftUI
 
-enum RightPaneView {
-    case detail
-    case noteEditor
-}
-
 struct ContentView: View {
     @StateObject private var settings = UserSettings()
     @StateObject private var store: ItemStore
@@ -21,13 +16,14 @@ struct ContentView: View {
     @State private var showingTagFilter = false
     @State private var showingSQLSearch = false
     @State private var showingHelp = false
-    @State private var rightPaneView: RightPaneView = .noteEditor
+    @State private var rightPaneView: RightPaneView
     @Environment(\.undoManager) var undoManager
 
     init() {
         let settings = UserSettings()
         _settings = StateObject(wrappedValue: settings)
         _store = StateObject(wrappedValue: ItemStore(settings: settings))
+        _rightPaneView = State(initialValue: settings.rightPaneView)
     }
 
     var body: some View {
@@ -85,6 +81,7 @@ struct ContentView: View {
 
                 Button(action: {
                     rightPaneView = rightPaneView == .detail ? .noteEditor : .detail
+                    settings.rightPaneView = rightPaneView
                 }) {
                     Image(systemName: rightPaneView == .noteEditor ? "doc.text.fill" : "doc.text")
                         .foregroundColor(rightPaneView == .noteEditor ? .accentColor : .primary)
@@ -143,10 +140,7 @@ struct ContentView: View {
                     DetailView(store: store)
                         .frame(minWidth: 300, idealWidth: 500, maxWidth: .infinity)
                 } else {
-                    NoteEditorView(store: store, showDetailView: Binding(
-                        get: { rightPaneView == .detail },
-                        set: { if $0 { rightPaneView = .detail } }
-                    ))
+                    NoteEditorView(store: store)
                     .frame(minWidth: 300, idealWidth: 500, maxWidth: .infinity)
                 }
             }

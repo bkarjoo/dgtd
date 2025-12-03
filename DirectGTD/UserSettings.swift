@@ -15,6 +15,7 @@ class UserSettings: ObservableObject {
         static let showCompletedTasks = "showCompletedTasks"
         static let markdownFontSize = "markdownFontSize"
         static let markdownLineSpacing = "markdownLineSpacing"
+        static let rightPaneView = "rightPaneView"
     }
 
     @Published var fontSize: CGFloat {
@@ -65,6 +66,12 @@ class UserSettings: ObservableObject {
         }
     }
 
+    @Published var rightPaneView: RightPaneView {
+        didSet {
+            defaults.set(rightPaneView.rawValue, forKey: Keys.rightPaneView)
+        }
+    }
+
     init() {
         // Load fontSize from UserDefaults, default to 13
         self.fontSize = defaults.object(forKey: Keys.fontSize) as? CGFloat ?? 13
@@ -86,5 +93,13 @@ class UserSettings: ObservableObject {
 
         // Load markdownLineSpacing, default to 4
         self.markdownLineSpacing = defaults.object(forKey: Keys.markdownLineSpacing) as? CGFloat ?? 4
+
+        // Load rightPaneView, default to noteEditor
+        if let storedPane = defaults.string(forKey: Keys.rightPaneView),
+           let pane = RightPaneView(rawValue: storedPane) {
+            self.rightPaneView = pane
+        } else {
+            self.rightPaneView = .noteEditor
+        }
     }
 }
