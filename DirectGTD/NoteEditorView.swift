@@ -10,69 +10,23 @@ struct NoteEditorView: View {
     @ObservedObject var store: ItemStore
     @State private var mode: NoteEditorMode = .preview
     @State private var editedText: String = ""
+    @FocusState private var editorFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             if let selectedId = store.selectedItemId {
-
-                // Toolbar
-                HStack {
-                    Spacer()
-
-                    // Edit/Preview toggle button
-                    Button(action: {
-                        // Save when switching from edit to preview
-                        if mode == .edit {
-                            saveNotes(for: selectedId)
-                        }
-                        mode = mode == .edit ? .preview : .edit
-                    }) {
-                        Image(systemName: "pencil")
-                            .foregroundColor(mode == .edit ? .white : .primary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(mode == .edit ? Color.accentColor : Color.clear)
-                            .cornerRadius(6)
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-                }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 8)
-                .background(Color(NSColor.controlBackgroundColor))
-
+                toolbarSection(selectedId: selectedId)
                 Divider()
 
-                // Content area
                 if mode == .edit {
-                    // Edit mode - TextEditor
                     TextEditor(text: $editedText)
                         .font(.body)
                         .padding(16)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .focused($editorFocused)
                 } else {
-                    // Preview mode - Markdown rendering
-                    ScrollView {
-                        if !editedText.isEmpty {
-                            Markdown(editedText)
-                                .padding(16)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            VStack {
-                                Spacer()
-                                Text("No notes")
-                                    .foregroundColor(.secondary)
-                                    .italic()
-                                Spacer()
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    previewSection
                 }
-
             } else {
                 Text("No item selected")
                     .foregroundColor(.secondary)
@@ -81,20 +35,72 @@ struct NoteEditorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
+            mode = .preview
             loadNotes()
         }
         .onChange(of: store.selectedItemId) { _, _ in
+            mode = .preview
             loadNotes()
         }
-        .onKeyPress { keyPress in
-            if keyPress.key == KeyEquivalent("e") && keyPress.modifiers.contains(.command) {
-                // Cmd+E: Enter edit mode
-                if mode == .preview {
-                    mode = .edit
+        .onReceive(store.$noteEditorShouldToggleEditMode) { _ in handleToggleShortcut() }
+    }
+
+    private func toolbarSection(selectedId: String) -> some View {
+        HStack {
+            Spacer()
+            Button(action: {
+                if mode == .edit {
+                    saveNotes(for: selectedId)
                 }
-                return .handled
+                mode = mode == .edit ? .preview : .edit
+            }) {
+                Image(systemName: "pencil")
+                    .foregroundColor(mode == .edit ? .white : .primary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(mode == .edit ? Color.accentColor : Color.clear)
+                    .cornerRadius(6)
             }
-            return .ignored
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .background(Color(NSColor.controlBackgroundColor))
+    }
+
+    private var previewSection: some View {
+        ScrollView {
+            if !editedText.isEmpty {
+                Markdown(editedText)
+                    .padding(16)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                VStack {
+                    Spacer()
+                    Text("No notes")
+                        .foregroundColor(.secondary)
+                        .italic()
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func handleToggleShortcut() {
+        if case .edit = mode {
+            saveCurrentNoteIfNeeded()
+            mode = .preview
+            store.noteEditorIsInEditMode = false
+            editorFocused = false
+            DispatchQueue.main.async { store.focusTreeView() }
+        } else {
+            mode = .edit
+            store.noteEditorIsInEditMode = true
+            editorFocused = true
         }
     }
 
@@ -110,6 +116,11 @@ struct NoteEditorView: View {
     private func saveNotes(for itemId: String) {
         let notesToSave = editedText.isEmpty ? nil : editedText
         store.updateNotes(id: itemId, notes: notesToSave)
+    }
+
+    private func saveCurrentNoteIfNeeded() {
+        guard let selectedId = store.selectedItemId else { return }
+        saveNotes(for: selectedId)
     }
 }
 

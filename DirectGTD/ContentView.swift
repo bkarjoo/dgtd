@@ -161,7 +161,11 @@ struct ContentView: View {
             SQLSearchView(store: store)
         }
         .sheet(isPresented: $showingHelp) {
-            HelpView()
+            if store.noteEditorIsInEditMode {
+                MarkdownHelpView()
+            } else {
+                HelpView()
+            }
         }
         .alert("Error", isPresented: Binding(
             get: { store.errorMessage != nil },
@@ -181,8 +185,9 @@ struct ContentView: View {
                 // Cmd+E: Switch to note editor and enter edit mode
                 if rightPaneView != .noteEditor {
                     rightPaneView = .noteEditor
+                    settings.rightPaneView = rightPaneView
                 }
-                // NoteEditorView will handle entering edit mode via its own onKeyPress
+                store.requestNoteEditorToggleEditMode()
                 return .handled
             }
             if keyPress.key == KeyEquivalent("/") && keyPress.modifiers.contains(.command) && keyPress.modifiers.contains(.shift) {

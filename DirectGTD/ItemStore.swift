@@ -28,6 +28,8 @@ class ItemStore: ObservableObject {
     @Published var sqlSearchActive: Bool = false
     @Published var sqlSearchQuery: String = ""
     @Published var sqlSearchResults: [String] = [] // Item IDs from SQL query
+    @Published var noteEditorShouldToggleEditMode: Bool = false
+    @Published var noteEditorIsInEditMode: Bool = false
     @Published var showingSQLSearch: Bool = false
     @Published private(set) var savedSearches: [SavedSearch] = []
     private let repository: ItemRepository
@@ -673,10 +675,7 @@ class ItemStore: ObservableObject {
 
         do {
             try repository.update(updatedItem)
-            // Update in-memory
-            if let index = items.firstIndex(where: { $0.id == selectedId }) {
-                items[index] = updatedItem
-            }
+            loadItems()
         } catch {
             print("Error indenting item: \(error)")
         }
@@ -724,10 +723,7 @@ class ItemStore: ObservableObject {
 
         do {
             try repository.update(updatedItem)
-            // Update in-memory
-            if let index = items.firstIndex(where: { $0.id == selectedId }) {
-                items[index] = updatedItem
-            }
+            loadItems()
         } catch {
             print("Error outdenting item: \(error)")
         }
@@ -1179,6 +1175,14 @@ class ItemStore: ObservableObject {
         sqlSearchActive = false
         sqlSearchQuery = ""
         sqlSearchResults = []
+    }
+
+    func requestNoteEditorToggleEditMode() {
+        noteEditorShouldToggleEditMode.toggle()
+    }
+
+    func focusTreeView() {
+        NotificationCenter.default.post(name: .focusTreeView, object: nil)
     }
 
     func saveSQLSearch(name: String, sql: String) throws {

@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import UniformTypeIdentifiers
 
 extension UTType {
@@ -206,6 +207,10 @@ struct TreeView: View {
                 }
                 return .handled
             case KeyEquivalent("e"), KeyEquivalent("E"):
+                // Cmd+E is handled globally for note editing
+                if keyPress.modifiers.contains(.command) {
+                    return .ignored
+                }
                 DispatchQueue.main.async {
                     store.createItemAfterSelected(withType: .event)
                 }
@@ -257,6 +262,11 @@ struct TreeView: View {
             // Update selection when SQL results change (e.g., user runs new query)
             DispatchQueue.main.async {
                 updateSelectionIfInvalid()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .focusTreeView)) { _ in
+            DispatchQueue.main.async {
+                isFocused = true
             }
         }
         .onAppear {
