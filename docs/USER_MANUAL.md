@@ -56,6 +56,8 @@ DirectGTD is a **keyboard-first, hierarchical task manager** with item types, ch
 | **Shift+Tab** | Outdent (promote it up one level) |
 | **Cmd+↑** | Move item up (within same level) |
 | **Cmd+↓** | Move item down (within same level) |
+| **Cmd+C** | Duplicate item (shallow - item + children) |
+| **Cmd+Shift+C** | Duplicate item (deep - entire subtree) |
 
 ### View Controls
 | Key | What It Does |
@@ -314,6 +316,67 @@ Move items up/down within their current level:
 Only works among siblings (same parent, same level). Want to move to a different level? Use Tab/Shift+Tab.
 
 *[Screenshot: Item being reordered with Cmd+arrows]*
+
+---
+
+## Duplicating Items
+
+**Copy items with keyboard shortcuts.**
+
+DirectGTD offers two duplication modes depending on how much you want to copy.
+
+**Shallow Copy (Cmd+C):**
+- Duplicates selected item + its immediate children
+- **One level deep** - Grandchildren and deeper descendants are NOT copied
+- Duplicate appears as sibling immediately after the original
+- Perfect for copying a task with a few subtasks
+
+**Deep Copy (Cmd+Shift+C):**
+- Duplicates selected item + **entire subtree recursively**
+- **All descendants copied** - Children, grandchildren, and all levels
+- Full hierarchy preserved in the copy
+- Expansion state preserved (collapsed items stay collapsed)
+- Perfect for copying project templates or complex folder structures
+
+**What Gets Copied:**
+
+Both modes copy:
+- ✓ Item title, type, and notes
+- ✓ Due dates and earliest start times
+- ✓ All tags (tag relationships preserved)
+- ✓ Hierarchy structure (parent-child relationships)
+
+Both modes reset:
+- ✗ Completion status - Tasks start incomplete (checkbox unchecked)
+- ✗ IDs and timestamps - Fresh IDs and creation times assigned
+
+**Auto-Expand:**
+- If the duplicated item has children, it's automatically expanded
+- You see what you just duplicated immediately
+
+**Undo Support:**
+- **Cmd+Z** deletes the entire duplicated subtree
+- Works for both shallow and deep copies
+- Atomic operation - all or nothing
+
+**Use Cases:**
+
+**Shallow Copy:**
+- Duplicate a task with a few action items
+- Copy a project outline without all the details
+- Template a folder structure without deep nesting
+
+**Deep Copy:**
+- Clone entire project hierarchies
+- Duplicate complex GTD structures
+- Copy template folders with all contents
+- Replicate recurring workflows (weekly review, monthly reports)
+
+**Pro tip:** Use deep copy for project templates. Create your ideal project structure once (folders, milestones, tasks with tags), then Cmd+Shift+C to duplicate it for new projects.
+
+*[Screenshot: Shallow copy - item with children duplicated]*
+
+*[Screenshot: Deep copy - entire project hierarchy duplicated]*
 
 ---
 
@@ -611,6 +674,7 @@ All settings **persist across sessions**.
 - Parent items auto-expand when you indent under them
 - Use Cmd+↑/↓ to fine-tune order at the same level
 - Delete removes the whole subtree (but Cmd+Z restores it!)
+- **Duplicate with Cmd+C/Cmd+Shift+C** - Create project templates once, copy them forever
 - Watch folder counts to gauge project sizes
 - **Color-code tags** by category (blue=work, green=home, red=urgent)
 
@@ -695,6 +759,15 @@ A: No! Use the example queries provided and modify them. Copy "Overdue Tasks" an
 **Q: Can SQL search break my database?**
 A: No. SQL search only allows SELECT queries (read-only). You can't DELETE, UPDATE, or modify data. Queries also timeout after 250ms to prevent performance issues.
 
+**Q: What's the difference between Cmd+C and Cmd+Shift+C for duplicating?**
+A: Cmd+C copies the item and its immediate children (shallow, one level). Cmd+Shift+C copies the entire subtree recursively (deep, all levels). Use shallow for simple tasks, deep for project templates.
+
+**Q: When I duplicate a completed task, is the copy also completed?**
+A: No! Duplicated tasks always start incomplete (unchecked). This lets you reuse task templates without manually unchecking everything.
+
+**Q: Do duplicated items keep the same tags?**
+A: Yes! All tag relationships are preserved in both shallow and deep copies. This makes it easy to duplicate tagged project templates.
+
 **Q: How do I check off tasks with keyboard?**
 A: Press period (.) when a task is selected. No mouse needed!
 
@@ -768,6 +841,15 @@ Questions? Found a bug? Want to contribute?
 **Version 2.1** | Made for humans who type faster than they click (but can drag too)
 
 ### What's New in 2.1
+
+**🎉 Duplicate Items** - Copy hierarchies with keyboard shortcuts!
+- **Shallow copy (Cmd+C)** - Duplicate item + immediate children only
+- **Deep copy (Cmd+Shift+C)** - Duplicate entire subtree recursively
+- **Smart copying** - Tags preserved, tasks reset to incomplete, fresh IDs
+- **Auto-expand** - Duplicated items with children expand automatically
+- **Undo support** - Cmd+Z deletes entire duplicated subtree
+- **Atomic operations** - All or nothing, no partial copies
+- **Use cases**: Project templates, recurring workflows, folder structures
 
 **🎉 SQL Search** - Ultimate power-user filtering!
 - **Raw SQLite queries** for maximum flexibility
