@@ -32,6 +32,11 @@ class ItemStore: ObservableObject {
     @Published var noteEditorIsInEditMode: Bool = false
     @Published var showingSQLSearch: Bool = false
     @Published private(set) var savedSearches: [SavedSearch] = []
+
+    // Time tracking state
+    @Published private(set) var activeTimeEntries: [TimeEntry] = []  // All running timers
+    @Published private(set) var itemTimeTotals: [String: Int] = [:]  // Cache: itemId -> total seconds
+
     private let repository: ItemRepository
     let settings: UserSettings
     var undoManager: UndoManager?
@@ -48,6 +53,7 @@ class ItemStore: ObservableObject {
         do {
             items = try repository.getAllItems()
             loadTags()
+            loadTimeTracking()
 
             // Validate focusedItemId - clear if the item no longer exists
             if let focusedId = focusedItemId, !items.contains(where: { $0.id == focusedId }) {
@@ -1379,5 +1385,131 @@ class ItemStore: ObservableObject {
         let search = SavedSearch(name: name, sql: sql)
         try repository.createSavedSearch(search)
         loadSavedSearches()
+    }
+
+    // MARK: - Time Tracking
+
+    /// Loads active time entries and time totals for all items
+    func loadTimeTracking() {
+        do {
+            // Load all active (running) time entries
+            activeTimeEntries = try repository.getActiveTimeEntries()
+
+            // Load time totals for all items in batch
+            let itemIds = items.map { $0.id }
+            itemTimeTotals = try repository.getTotalTimesForItems(itemIds: itemIds)
+        } catch {
+            print("Error loading time tracking data: \(error)")
+        }
+    }
+
+    /// Starts a new timer for the specified item
+    /// - Returns: The created TimeEntry, or nil if creation failed
+    @discardableResult
+    func startTimer(for itemId: String) -> TimeEntry? {
+        let entry = TimeEntry(itemId: itemId)
+
+        do {
+            try repository.createTimeEntry(entry)
+            activeTimeEntries.append(entry)
+            return entry
+        } catch {
+            print("Error starting timer: \(error)")
+            return nil
+        }
+    }
+
+    /// Stops a running timer by entry ID
+    /// - Returns: The stopped TimeEntry with duration, or nil if not found/failed
+    @discardableResult
+    func stopTimer(entryId: String) -> TimeEntry? {
+        do {
+            guard let stoppedEntry = try repository.stopTimeEntry(id: entryId) else {
+                return nil
+            }
+
+            // Remove from active entries
+            activeTimeEntries.removeAll { $0.id == entryId }
+
+            // Update the cached total for this item
+            if let duration = stoppedEntry.duration {
+                itemTimeTotals[stoppedEntry.itemId, default: 0] += duration
+            }
+
+            return stoppedEntry
+        } catch {
+            print("Error stopping timer: \(error)")
+            return nil
+        }
+    }
+
+    /// Stops all running timers for a specific item
+    func stopAllTimers(for itemId: String) {
+        let entriesToStop = activeTimeEntries.filter { $0.itemId == itemId }
+        for entry in entriesToStop {
+            stopTimer(entryId: entry.id)
+        }
+    }
+
+    /// Returns the active time entry for an item, if any
+    func activeTimeEntry(for itemId: String) -> TimeEntry? {
+        return activeTimeEntries.first { $0.itemId == itemId }
+    }
+
+    /// Returns all active time entries for an item (supports multiple concurrent timers)
+    func activeTimeEntries(for itemId: String) -> [TimeEntry] {
+        return activeTimeEntries.filter { $0.itemId == itemId }
+    }
+
+    /// Returns true if there's at least one running timer for the item
+    func hasActiveTimer(for itemId: String) -> Bool {
+        return activeTimeEntries.contains { $0.itemId == itemId }
+    }
+
+    /// Gets the total tracked time (in seconds) for an item (from cache)
+    func totalTime(for itemId: String) -> Int {
+        return itemTimeTotals[itemId] ?? 0
+    }
+
+    /// Gets all time entries for an item (for displaying history)
+    func getTimeEntries(for itemId: String) -> [TimeEntry] {
+        do {
+            return try repository.getTimeEntriesForItem(itemId: itemId)
+        } catch {
+            print("Error fetching time entries: \(error)")
+            return []
+        }
+    }
+
+    /// Deletes a time entry by ID
+    func deleteTimeEntry(id: String) {
+        do {
+            // Get the entry first to update cache
+            if let entry = try repository.getTimeEntry(id: id) {
+                try repository.deleteTimeEntry(id: id)
+
+                // Remove from active entries if it was running
+                activeTimeEntries.removeAll { $0.id == id }
+
+                // Update cached total if it had a duration
+                if let duration = entry.duration {
+                    let currentTotal = itemTimeTotals[entry.itemId] ?? 0
+                    itemTimeTotals[entry.itemId] = max(0, currentTotal - duration)
+                }
+            }
+        } catch {
+            print("Error deleting time entry: \(error)")
+        }
+    }
+
+    /// Toggles timer state for an item: starts if no active timer, stops if running
+    /// - Returns: The affected TimeEntry (newly started or just stopped)
+    @discardableResult
+    func toggleTimer(for itemId: String) -> TimeEntry? {
+        if let activeEntry = activeTimeEntry(for: itemId) {
+            return stopTimer(entryId: activeEntry.id)
+        } else {
+            return startTimer(for: itemId)
+        }
     }
 }

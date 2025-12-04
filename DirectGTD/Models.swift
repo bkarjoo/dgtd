@@ -113,6 +113,52 @@ struct Item: Codable, FetchableRecord, PersistableRecord {
     }
 }
 
+// MARK: - Time Entry Model
+struct TimeEntry: Codable, FetchableRecord, PersistableRecord, Identifiable, Equatable {
+    var id: String
+    var itemId: String
+    var startedAt: Int
+    var endedAt: Int?
+    var duration: Int?
+
+    static let databaseTableName = "time_entries"
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case itemId = "item_id"
+        case startedAt = "started_at"
+        case endedAt = "ended_at"
+        case duration
+    }
+
+    init(
+        id: String = UUID().uuidString,
+        itemId: String,
+        startedAt: Int = Int(Date().timeIntervalSince1970),
+        endedAt: Int? = nil,
+        duration: Int? = nil
+    ) {
+        self.id = id
+        self.itemId = itemId
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.duration = duration
+    }
+
+    /// Returns true if this entry is still running (no end time)
+    var isRunning: Bool {
+        endedAt == nil
+    }
+
+    /// Calculates elapsed seconds from startedAt to now (for running entries) or returns stored duration
+    func elapsedSeconds(now: Int = Int(Date().timeIntervalSince1970)) -> Int {
+        if let duration = duration {
+            return duration
+        }
+        return now - startedAt
+    }
+}
+
 // MARK: - Tag Model
 struct Tag: Codable, FetchableRecord, PersistableRecord {
     var id: String

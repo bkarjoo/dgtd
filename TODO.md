@@ -39,6 +39,37 @@
   - When instantiating, clone all descendants, preserving structure, tags, notes, and relative sort orders.
   - Consider placeholders/variables for due dates or titles so template instances can adapt at creation time.
 
+## Time Tracking
+
+- Add `time_entries` table for tracking work sessions on tasks
+  ```sql
+  CREATE TABLE time_entries (
+      id TEXT PRIMARY KEY,
+      item_id TEXT NOT NULL,
+      started_at INTEGER NOT NULL,
+      ended_at INTEGER,
+      duration INTEGER,
+      FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+  );
+  ```
+- Model: `TimeEntry` struct with `id`, `itemId`, `startedAt`, `endedAt`, `duration`
+- Core operations:
+  - Start timer: create entry with `started_at = now`, `ended_at = null`
+  - Stop timer: set `ended_at = now`, calculate and store `duration`
+  - Get total time for item: `SUM(duration) WHERE item_id = ?`
+  - Get active timer: `WHERE ended_at IS NULL` (enforce max one globally)
+- UI integration:
+  - Timer button on task rows (play/stop icon)
+  - Display running time for active entry
+  - Show total logged time per task
+  - Optional: time log view showing all entries for a task
+- Files to modify:
+  - `Models.swift` - Add `TimeEntry` struct
+  - `ItemRepository.swift` - CRUD for time entries
+  - `ItemStore.swift` - `startTimer()`, `stopTimer()`, active timer state
+  - `Database.swift` - Migration v8 for new table
+  - `ItemRow.swift` - Timer button and display
+
 ## Custom Shortcuts
 
 - Allow users to bind keyboard shortcuts to saved searches and template instantiation commands.

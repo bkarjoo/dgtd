@@ -197,6 +197,36 @@ open class Database: DatabaseProvider {
             NSLog("Database: Migration v7 completed successfully")
         }
 
+        // Register v8 migration (add time_entries table)
+        migrator.registerMigration("v8") { db in
+            NSLog("Database: Running migration v8 (add time_entries table)")
+
+            let tableExists = try db.tableExists("time_entries")
+
+            guard !tableExists else {
+                NSLog("Database: time_entries table already exists, skipping")
+                return
+            }
+
+            try db.execute(sql: """
+                CREATE TABLE time_entries (
+                    id TEXT PRIMARY KEY,
+                    item_id TEXT NOT NULL,
+                    started_at INTEGER NOT NULL,
+                    ended_at INTEGER,
+                    duration INTEGER,
+                    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+                )
+            """)
+            NSLog("Database: Created time_entries table")
+
+            try db.execute(sql: "CREATE INDEX idx_time_entries_item_id ON time_entries(item_id)")
+            try db.execute(sql: "CREATE INDEX idx_time_entries_started_at ON time_entries(started_at)")
+            NSLog("Database: Created indexes for time_entries")
+
+            NSLog("Database: Migration v8 completed successfully")
+        }
+
         // Handle backward compatibility: Detect legacy databases and reset them
         try queue.write { db in
             // State Detection Step 1: Check if grdb_migrations table exists

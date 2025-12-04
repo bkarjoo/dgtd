@@ -269,11 +269,12 @@ class ItemRepository {
             throw DatabaseError.notInitialized
         }
 
-        let observation = ValueObservation.trackingConstantRegion { db -> (Int, Int, Int) in
+        let observation = ValueObservation.trackingConstantRegion { db -> (Int, Int, Int, Int) in
             let itemCount = try Item.fetchCount(db)
             let tagCount = try Tag.fetchCount(db)
             let itemTagCount = try ItemTag.fetchCount(db)
-            return (itemCount, tagCount, itemTagCount)
+            let timeEntryCount = try TimeEntry.fetchCount(db)
+            return (itemCount, tagCount, itemTagCount, timeEntryCount)
         }
 
         return observation.start(
@@ -628,6 +629,169 @@ class ItemRepository {
 
         return hasContentAfterSemicolon
     }
+
+    // MARK: - Time Entries
+
+    /// Creates a new time entry
+    func createTimeEntry(_ entry: TimeEntry) throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        try dbQueue.write { db in
+            try entry.insert(db)
+        }
+    }
+
+    /// Updates an existing time entry
+    func updateTimeEntry(_ entry: TimeEntry) throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        try dbQueue.write { db in
+            try entry.update(db)
+        }
+    }
+
+    /// Deletes a time entry by ID
+    func deleteTimeEntry(id: String) throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        try dbQueue.write { db in
+            try TimeEntry.deleteOne(db, key: id)
+        }
+    }
+
+    /// Gets a time entry by ID
+    func getTimeEntry(id: String) throws -> TimeEntry? {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.read { db in
+            try TimeEntry.fetchOne(db, key: id)
+        }
+    }
+
+    /// Gets all time entries for a specific item, ordered by started_at descending
+    func getTimeEntriesForItem(itemId: String) throws -> [TimeEntry] {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.read { db in
+            try TimeEntry
+                .filter(Column("item_id") == itemId)
+                .order(Column("started_at").desc)
+                .fetchAll(db)
+        }
+    }
+
+    /// Gets all currently running time entries (ended_at IS NULL)
+    func getActiveTimeEntries() throws -> [TimeEntry] {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.read { db in
+            try TimeEntry
+                .filter(Column("ended_at") == nil)
+                .order(Column("started_at").desc)
+                .fetchAll(db)
+        }
+    }
+
+    /// Gets the most recent running time entry for a specific item, if any
+    func getActiveTimeEntryForItem(itemId: String) throws -> TimeEntry? {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.read { db in
+            try TimeEntry
+                .filter(Column("item_id") == itemId)
+                .filter(Column("ended_at") == nil)
+                .order(Column("started_at").desc)
+                .fetchOne(db)
+        }
+    }
+
+    /// Calculates total tracked time (in seconds) for an item from completed entries
+    func getTotalTimeForItem(itemId: String) throws -> Int {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.read { db in
+            let total = try Int.fetchOne(
+                db,
+                sql: "SELECT COALESCE(SUM(duration), 0) FROM time_entries WHERE item_id = ? AND duration IS NOT NULL",
+                arguments: [itemId]
+            )
+            return total ?? 0
+        }
+    }
+
+    /// Gets total tracked time for multiple items at once (for efficient batch loading)
+    /// Chunks requests to avoid SQLite's 999 variable limit
+    func getTotalTimesForItems(itemIds: [String]) throws -> [String: Int] {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        guard !itemIds.isEmpty else { return [:] }
+
+        // SQLite has a default limit of 999 variables; chunk to stay well under
+        let chunkSize = 500
+        var result: [String: Int] = [:]
+
+        return try dbQueue.read { db in
+            for chunk in itemIds.chunked(into: chunkSize) {
+                let placeholders = chunk.map { _ in "?" }.joined(separator: ", ")
+                let sql = """
+                    SELECT item_id, COALESCE(SUM(duration), 0) as total
+                    FROM time_entries
+                    WHERE item_id IN (\(placeholders)) AND duration IS NOT NULL
+                    GROUP BY item_id
+                """
+
+                let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(chunk))
+                for row in rows {
+                    if let itemId = row["item_id"] as? String,
+                       let total = row["total"] as? Int {
+                        result[itemId] = total
+                    }
+                }
+            }
+            return result
+        }
+    }
+
+    /// Stops a time entry by setting ended_at and calculating duration (transactional)
+    func stopTimeEntry(id: String, endedAt: Int = Int(Date().timeIntervalSince1970)) throws -> TimeEntry? {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.write { db in
+            guard var entry = try TimeEntry.fetchOne(db, key: id) else {
+                return nil
+            }
+
+            // Only stop if not already stopped
+            guard entry.endedAt == nil else {
+                return entry
+            }
+
+            entry.endedAt = endedAt
+            entry.duration = endedAt - entry.startedAt
+            try entry.update(db)
+            return entry
+        }
+    }
 }
 
 // MARK: - Error Handling
@@ -645,6 +809,18 @@ enum DatabaseError: Error, LocalizedError {
             return "Item not found"
         case .invalidQuery(let message):
             return message
+        }
+    }
+}
+
+// MARK: - Array Chunking Extension
+
+extension Array {
+    /// Splits the array into chunks of the specified size
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0 else { return [self] }
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
         }
     }
 }

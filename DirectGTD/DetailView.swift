@@ -1,8 +1,11 @@
 import SwiftUI
+import Combine
 
 struct DetailView: View {
     @ObservedObject var store: ItemStore
     @State private var showingTagPicker: Bool = false
+    @State private var timerTick: Int = 0  // Triggers view updates for live elapsed time
+    @State private var timerCancellable: AnyCancellable?
 
     var body: some View {
         VStack {
@@ -131,6 +134,63 @@ struct DetailView: View {
                         .frame(minHeight: 32)
                     }
 
+                    Section("Time Tracking") {
+                        HStack {
+                            Text("Total Time")
+                            Spacer()
+                            Text(formatDuration(store.totalTime(for: selectedId)))
+                                .foregroundColor(.secondary)
+                        }
+
+                        HStack {
+                            Text("Timer")
+                            Spacer()
+
+                            if let activeEntry = store.activeTimeEntry(for: selectedId) {
+                                // Show running timer with elapsed time (timerTick forces refresh)
+                                let _ = timerTick
+                                Text(formatDuration(activeEntry.elapsedSeconds()))
+                                    .foregroundColor(.green)
+                                    .font(.system(.body, design: .monospaced))
+
+                                Button(action: {
+                                    store.stopTimer(entryId: activeEntry.id)
+                                }) {
+                                    Image(systemName: "stop.fill")
+                                        .foregroundColor(.red)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Stop timer")
+                            } else {
+                                Text("Not running")
+                                    .foregroundColor(.secondary)
+
+                                Button(action: {
+                                    store.startTimer(for: selectedId)
+                                }) {
+                                    Image(systemName: "play.fill")
+                                        .foregroundColor(.green)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Start timer")
+                            }
+                        }
+                    }
+                    .onChange(of: store.activeTimeEntries) { _, _ in
+                        updateTimerSubscription()
+                    }
+                    .onChange(of: store.selectedItemId) { _, _ in
+                        updateTimerSubscription()
+                    }
+                    .onAppear {
+                        updateTimerSubscription()
+                    }
+                    .onDisappear {
+                        timerCancellable?.cancel()
+                        timerCancellable = nil
+                        timerTick = 0
+                    }
+
                     Section("Notes") {
                         TextEditor(text: Binding(
                             get: { selectedItem.notes ?? "" },
@@ -180,6 +240,38 @@ struct DetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else if minutes > 0 {
+            return "\(minutes)m"
+        } else if seconds > 0 {
+            return "<1m"
+        } else {
+            return "0m"
+        }
+    }
+
+    private func updateTimerSubscription() {
+        let needsTimer = store.selectedItemId.flatMap { store.hasActiveTimer(for: $0) } ?? false
+
+        if needsTimer && timerCancellable == nil {
+            // Start the timer
+            timerCancellable = Timer.publish(every: 1, on: .main, in: .common)
+                .autoconnect()
+                .sink { _ in
+                    timerTick += 1
+                }
+        } else if !needsTimer && timerCancellable != nil {
+            // Stop the timer
+            timerCancellable?.cancel()
+            timerCancellable = nil
+        }
     }
 }
 

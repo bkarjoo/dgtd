@@ -102,6 +102,15 @@ CREATE TABLE item_tags (
     FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
 
+CREATE TABLE time_entries (
+    id TEXT PRIMARY KEY,
+    item_id TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    duration INTEGER,
+    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+);
+
 -- Indexes for performance
 CREATE INDEX idx_folders_parent_id ON folders(parent_id);
 CREATE INDEX idx_folders_sort_order ON folders(sort_order);
@@ -112,3 +121,5 @@ CREATE INDEX idx_context ON items(context);
 CREATE INDEX idx_notes_item ON notes(item_id);
 CREATE INDEX idx_item_tags_item ON item_tags(item_id);
 CREATE INDEX idx_item_tags_tag ON item_tags(tag_id);
+CREATE INDEX idx_time_entries_item_id ON time_entries(item_id);
+CREATE INDEX idx_time_entries_started_at ON time_entries(started_at);
