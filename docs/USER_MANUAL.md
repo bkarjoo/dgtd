@@ -135,6 +135,7 @@ The app has **two panes**:
 **Right Pane (DetailView):**
 - Shows details of selected item
 - Change item type
+- Track time with start/stop timers
 - Set due dates and earliest start times
 - Toggle task completion
 - Add/edit notes
@@ -245,6 +246,68 @@ Every item can have notes - perfect for task descriptions, project details, refe
 - Context and background for any item
 
 *[Screenshot: DetailView showing notes editor with content]*
+
+---
+
+## Time Tracking
+
+**Track how much time you spend on tasks and projects.**
+
+DirectGTD includes built-in time tracking for any item. Start a timer, work on your task, stop the timer - all your time is automatically logged.
+
+**Starting a Timer:**
+1. Select an item in the tree
+2. In DetailView → **Time Tracking section**
+3. Click the **play button** (▶️)
+4. Timer starts running immediately
+
+**While Timer Runs:**
+- **Live elapsed time** updates every second
+- **Green monospaced text** shows current duration
+- **Stop button** (🔴) appears to end the session
+- Timer keeps running even if you switch to other items
+
+**Stopping a Timer:**
+- Click the **stop button** (🔴) next to the running timer
+- Time entry is saved to database with start/end times
+- Total time for item updates automatically
+
+**Viewing Total Time:**
+- **Total Time** row shows cumulative tracked time for the item
+- Includes all past time entries plus any active timer
+- Updates live as timers run
+- Persists across app sessions
+
+**Multiple Concurrent Timers:**
+- You can run **multiple timers simultaneously**
+- Track time on different tasks at once
+- Perfect for multitasking or parallel work streams
+- Each item shows its own timer state independently
+
+**Smart Timer Management:**
+- Timer only ticks when DetailView is visible
+- Automatically cleans up when you close the view
+- No performance impact when not actively viewing timers
+- Database observes time_entries for auto-refresh
+
+**Data Storage:**
+- All time entries stored in local database
+- Each entry: id, itemId, startedAt, endedAt, duration
+- Cascade delete - deleting an item removes its time entries
+- Time totals cached for fast display
+
+**Use Cases:**
+- **Client billing** - Track billable hours per project
+- **Time audits** - See where your time actually goes
+- **Task estimation** - Compare estimated vs actual time
+- **Focus sessions** - Time-box your work (Pomodoro style)
+- **Project metrics** - Understand project time investment
+
+**Pro tip:** Start a timer at the beginning of your work session and forget about it. DirectGTD will track your time automatically while you focus on getting things done.
+
+*[Screenshot: DetailView Time Tracking section with running timer]*
+
+*[Screenshot: DetailView Time Tracking section showing total time]*
 
 ---
 
@@ -654,6 +717,7 @@ All settings **persist across sessions**.
 - Use **I** for rapid task capture without leaving context
 - Use **Cmd+F** to find anything instantly (scales to 1000+ items)
 - **SQL search** - Create saved searches for "Overdue", "Due Today", "Ready to Start" - one click filtering
+- **Start timers** at the beginning of work sessions - track time automatically while you focus
 - **Filter by tag** - Click tag icon to see only items in a specific context (home, work, etc.)
 - **Tags for contexts** - Tag tasks with contexts (home, work, computer) for GTD workflow
 - **Date badges** - Scan for red (overdue), orange (due today), blue (deferred) at a glance
@@ -699,6 +763,7 @@ All settings **persist across sessions**.
 DirectGTD follows one principle: **Get out of your way.**
 
 **What we have:**
+- **Time tracking** - Built-in timers for tracking work sessions on any item
 - **SQL search** - Raw SQLite queries for power users who want ultimate control
 - **Due dates & start times** - Track deadlines and defer work with visual badges
 - **Tags** - Flexible, color-coded organization for GTD contexts
@@ -767,6 +832,15 @@ A: No! Duplicated tasks always start incomplete (unchecked). This lets you reuse
 
 **Q: Do duplicated items keep the same tags?**
 A: Yes! All tag relationships are preserved in both shallow and deep copies. This makes it easy to duplicate tagged project templates.
+
+**Q: Can I run multiple timers at the same time?**
+A: Yes! DirectGTD supports multiple concurrent timers. Track time on different tasks simultaneously - perfect for multitasking or parallel work streams.
+
+**Q: What happens to time entries when I delete an item?**
+A: Time entries are automatically deleted (cascade delete). If you undo the deletion (Cmd+Z), the item comes back but time entries are lost - they're not restored by undo.
+
+**Q: Does the timer keep running if I switch to a different item?**
+A: Yes! Timers keep running even when you select a different item or close DetailView. You can have multiple timers running across different items.
 
 **Q: How do I check off tasks with keyboard?**
 A: Press period (.) when a task is selected. No mouse needed!
@@ -841,6 +915,15 @@ Questions? Found a bug? Want to contribute?
 **Version 2.1** | Made for humans who type faster than they click (but can drag too)
 
 ### What's New in 2.1
+
+**🎉 Time Tracking** - Built-in time tracking for any item!
+- **Start/stop timers** with play/stop buttons in DetailView
+- **Live elapsed time** updates every second while running
+- **Total tracked time** shows cumulative hours across all sessions
+- **Multiple concurrent timers** - Track time on different tasks simultaneously
+- **Smart performance** - Timer only runs when needed, cleans up automatically
+- **Database storage** - All time entries persisted with cascade delete
+- **Use cases**: Client billing, time audits, task estimation, focus sessions
 
 **🎉 Duplicate Items** - Copy hierarchies with keyboard shortcuts!
 - **Shallow copy (Cmd+C)** - Duplicate item + immediate children only
