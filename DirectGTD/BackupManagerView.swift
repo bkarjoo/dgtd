@@ -30,7 +30,7 @@ struct BackupManagerView: View {
                     Spacer()
                     Text("No backups yet")
                         .foregroundColor(.secondary)
-                    Text("Backups are created automatically every 24 hours")
+                    Text("Backups are created automatically (hourly and daily)")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Spacer()
@@ -40,8 +40,16 @@ struct BackupManagerView: View {
                     ForEach(backups) { backup in
                         HStack {
                             VStack(alignment: .leading) {
-                                Text(backup.filename)
-                                    .font(.body)
+                                HStack(spacing: 6) {
+                                    Text(backup.filename)
+                                        .font(.body)
+                                    Text(backup.typeLabel)
+                                        .font(.caption)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(backup.type == .daily ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
+                                        .cornerRadius(4)
+                                }
                                 Text(formatDate(backup.date))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
@@ -135,7 +143,7 @@ struct BackupManagerView: View {
     }
 
     private func refreshBackups() {
-        backups = backupService.listBackups()
+        backups = backupService.listAllBackups()
     }
 
     private func formatDate(_ date: Date) -> String {
