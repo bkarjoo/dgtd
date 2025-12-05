@@ -36,10 +36,12 @@ struct NoteEditorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             mode = .preview
+            store.noteEditorIsInEditMode = false
             loadNotes()
         }
         .onChange(of: store.selectedItemId) { _, _ in
             mode = .preview
+            store.noteEditorIsInEditMode = false
             loadNotes()
         }
         .onReceive(store.$noteEditorShouldToggleEditMode) { _ in handleToggleShortcut() }
@@ -51,8 +53,12 @@ struct NoteEditorView: View {
             Button(action: {
                 if mode == .edit {
                     saveNotes(for: selectedId)
+                    mode = .preview
+                    store.noteEditorIsInEditMode = false
+                } else {
+                    mode = .edit
+                    store.noteEditorIsInEditMode = true
                 }
-                mode = mode == .edit ? .preview : .edit
             }) {
                 Image(systemName: "pencil")
                     .foregroundColor(mode == .edit ? .white : .primary)

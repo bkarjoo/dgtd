@@ -117,7 +117,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .padding()
-                .help("Help (Cmd+?)")
+                .help("Help (Cmd+/)")
 
                 Button(action: { showingAddItem = true }) {
                     Image(systemName: "plus")
@@ -190,7 +190,7 @@ struct ContentView: View {
                 store.requestNoteEditorToggleEditMode()
                 return .handled
             }
-            if keyPress.key == KeyEquivalent("/") && keyPress.modifiers.contains(.command) && keyPress.modifiers.contains(.shift) {
+            if keyPress.key == KeyEquivalent("/") && keyPress.modifiers.contains(.command) {
                 showingHelp = true
                 return .handled
             }

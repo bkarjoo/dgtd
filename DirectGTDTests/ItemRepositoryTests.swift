@@ -197,6 +197,18 @@ class TestDatabaseWrapper: DatabaseProvider {
                 )
             """)
 
+            // Create saved_searches table
+            try db.execute(sql: """
+                CREATE TABLE saved_searches (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    sql TEXT NOT NULL,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    modified_at INTEGER NOT NULL
+                )
+            """)
+
             // Create indexes
             try db.execute(sql: "CREATE INDEX idx_parent_id ON items(parent_id)")
             try db.execute(sql: "CREATE INDEX idx_item_tags_item ON item_tags(item_id)")
