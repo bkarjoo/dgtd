@@ -203,51 +203,51 @@ final class BackupServiceTests: XCTestCase {
         XCTAssertEqual(initialBackups.count, 0)
 
         // Should create backup
-        backupService.checkAndBackupIfNeeded()
+        backupService.checkAndPerformDailyBackupIfNeeded()
 
         let backups = backupService.listBackups()
         XCTAssertEqual(backups.count, 1)
 
-        // Should have set lastBackupDate
-        let lastBackup = testDefaults.object(forKey: "lastBackupDate") as? Date
+        // Should have set lastDailyBackupDate
+        let lastBackup = testDefaults.object(forKey: "lastDailyBackupDate") as? Date
         XCTAssertNotNil(lastBackup)
     }
 
     func testCheckAndBackupIfNeededSkipsRecentBackup() throws {
         // Set last backup to 1 hour ago
         let oneHourAgo = Date(timeIntervalSinceNow: -3600)
-        testDefaults.set(oneHourAgo, forKey: "lastBackupDate")
+        testDefaults.set(oneHourAgo, forKey: "lastDailyBackupDate")
 
         let initialBackups = backupService.listBackups()
         XCTAssertEqual(initialBackups.count, 0)
 
         // Should skip backup
-        backupService.checkAndBackupIfNeeded()
+        backupService.checkAndPerformDailyBackupIfNeeded()
 
         let backups = backupService.listBackups()
         XCTAssertEqual(backups.count, 0)
 
         // Last backup date should be unchanged
-        let lastBackup = testDefaults.object(forKey: "lastBackupDate") as? Date
+        let lastBackup = testDefaults.object(forKey: "lastDailyBackupDate") as? Date
         XCTAssertEqual(lastBackup?.timeIntervalSince1970, oneHourAgo.timeIntervalSince1970, accuracy: 1.0)
     }
 
     func testCheckAndBackupIfNeededPerformsBackupAfter24Hours() throws {
         // Set last backup to 25 hours ago
         let twentyFiveHoursAgo = Date(timeIntervalSinceNow: -25 * 3600)
-        testDefaults.set(twentyFiveHoursAgo, forKey: "lastBackupDate")
+        testDefaults.set(twentyFiveHoursAgo, forKey: "lastDailyBackupDate")
 
         let initialBackups = backupService.listBackups()
         XCTAssertEqual(initialBackups.count, 0)
 
         // Should perform backup
-        backupService.checkAndBackupIfNeeded()
+        backupService.checkAndPerformDailyBackupIfNeeded()
 
         let backups = backupService.listBackups()
         XCTAssertEqual(backups.count, 1)
 
         // Last backup date should be updated
-        let lastBackup = testDefaults.object(forKey: "lastBackupDate") as? Date
+        let lastBackup = testDefaults.object(forKey: "lastDailyBackupDate") as? Date
         XCTAssertNotNil(lastBackup)
         XCTAssertTrue(lastBackup! > twentyFiveHoursAgo)
     }
