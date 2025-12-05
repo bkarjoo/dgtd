@@ -5,41 +5,47 @@ import Combine
 class BackupService: ObservableObject {
     static let shared = BackupService()
 
-    private let fileManager = FileManager.default
+    private let fileManager: FileManager
     private let backupThresholdCount = 30
     private var timerCancellable: AnyCancellable?
+    private let databaseProvider: DatabaseProvider
+    private let userDefaults: UserDefaults
+    private let backupsDirectory: URL
 
     // Published for UI to show prompt
     @Published var showBackupCleanupPrompt = false
     @Published var backupCount = 0
 
-    private var backupsDirectory: URL? {
-        guard let appSupport = try? fileManager.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        ) else { return nil }
-
-        let backupsDir = appSupport.appendingPathComponent("DirectGTD/backups")
-        try? fileManager.createDirectory(at: backupsDir, withIntermediateDirectories: true)
-        return backupsDir
-    }
-
-    private var databasePath: URL? {
-        guard let appSupport = try? fileManager.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        ) else { return nil }
-
-        return appSupport.appendingPathComponent("DirectGTD/directgtd.sqlite")
-    }
-
     private var lastBackupDateKey = "lastBackupDate"
 
-    init() {}
+    init(
+        databaseProvider: DatabaseProvider = Database.shared,
+        backupsDirectory: URL? = nil,
+        userDefaults: UserDefaults = .standard,
+        fileManager: FileManager = .default
+    ) {
+        self.databaseProvider = databaseProvider
+        self.userDefaults = userDefaults
+        self.fileManager = fileManager
+
+        // Use provided directory or default to production path
+        if let providedDir = backupsDirectory {
+            self.backupsDirectory = providedDir
+        } else {
+            guard let appSupport = try? fileManager.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            ) else {
+                fatalError("Could not access application support directory")
+            }
+            self.backupsDirectory = appSupport.appendingPathComponent("DirectGTD/backups")
+        }
+
+        // Create backups directory if it doesn't exist
+        try? fileManager.createDirectory(at: self.backupsDirectory, withIntermediateDirectories: true)
+    }
 
     // MARK: - Public API
 
@@ -54,7 +60,7 @@ class BackupService: ObservableObject {
         // Always check backup count so alert can fire even when skipping
         checkBackupCount()
 
-        let lastBackup = UserDefaults.standard.object(forKey: lastBackupDateKey) as? Date
+        let lastBackup = userDefaults.object(forKey: lastBackupDateKey) as? Date
 
         if let lastBackup = lastBackup {
             let hoursSinceBackup = Date().timeIntervalSince(lastBackup) / 3600
@@ -69,22 +75,21 @@ class BackupService: ObservableObject {
 
     /// Manually trigger a backup (for user-initiated backup)
     func performBackup() {
-        guard let dbQueue = Database.shared.getQueue(),
-              let backupsDir = backupsDirectory else {
-            NSLog("BackupService: Cannot backup - database or backups directory not available")
+        guard let dbQueue = databaseProvider.getQueue() else {
+            NSLog("BackupService: Cannot backup - database not available")
             return
         }
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd_HHmmss"
         let dateString = dateFormatter.string(from: Date())
-        let backupPath = backupsDir.appendingPathComponent("\(dateString).sqlite")
+        let backupPath = backupsDirectory.appendingPathComponent("\(dateString).sqlite")
 
         do {
             // Use GRDB's backup API for safe WAL handling
             try dbQueue.backup(to: DatabaseQueue(path: backupPath.path))
 
-            UserDefaults.standard.set(Date(), forKey: lastBackupDateKey)
+            userDefaults.set(Date(), forKey: lastBackupDateKey)
             NSLog("BackupService: Backup created at \(backupPath.path)")
 
             // Check if we've exceeded threshold
@@ -96,10 +101,8 @@ class BackupService: ObservableObject {
 
     /// Returns list of all backups sorted by date (newest first)
     func listBackups() -> [BackupInfo] {
-        guard let backupsDir = backupsDirectory else { return [] }
-
         do {
-            let files = try fileManager.contentsOfDirectory(at: backupsDir, includingPropertiesForKeys: [.fileSizeKey, .creationDateKey])
+            let files = try fileManager.contentsOfDirectory(at: backupsDirectory, includingPropertiesForKeys: [.fileSizeKey, .creationDateKey])
 
             return files
                 .filter { $0.pathExtension == "sqlite" }

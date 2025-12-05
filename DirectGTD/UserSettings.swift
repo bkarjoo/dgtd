@@ -3,7 +3,7 @@ import SwiftUI
 import Combine
 
 class UserSettings: ObservableObject {
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
 
     // Keys for UserDefaults
     private enum Keys {
@@ -72,7 +72,9 @@ class UserSettings: ObservableObject {
         }
     }
 
-    init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+
         // Load fontSize from UserDefaults, default to 13
         self.fontSize = defaults.object(forKey: Keys.fontSize) as? CGFloat ?? 13
 

@@ -5,32 +5,48 @@ import GRDB
 final class BackupServiceTests: XCTestCase {
     var backupService: BackupService!
     var testBackupDir: URL!
-    var testDBPath: URL!
-    var fileManager: FileManager!
+    var testDB: TestDatabaseWrapper!
+    var testDefaults: UserDefaults!
+    let testSuiteName = "BackupServiceTestSuite"
 
     override func setUp() {
         super.setUp()
-        backupService = BackupService()
-        fileManager = FileManager.default
 
-        // Create temporary test directories
-        let tempDir = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        testBackupDir = tempDir.appendingPathComponent("backups")
-        testDBPath = tempDir.appendingPathComponent("test.sqlite")
+        // Create isolated test dependencies
+        testDB = TestDatabaseWrapper()
+        testDefaults = UserDefaults(suiteName: testSuiteName)!
+        testDefaults.removePersistentDomain(forName: testSuiteName)
 
-        try? fileManager.createDirectory(at: testBackupDir, withIntermediateDirectories: true)
+        // Create temporary backup directory
+        testBackupDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent("backups")
 
-        // Clear any previous backup date
-        UserDefaults.standard.removeObject(forKey: "lastBackupDate")
+        // Create BackupService with injected dependencies
+        backupService = BackupService(
+            databaseProvider: testDB,
+            backupsDirectory: testBackupDir,
+            userDefaults: testDefaults
+        )
     }
 
     override func tearDown() {
-        // Clean up test directories
-        if let tempDir = testBackupDir?.deletingLastPathComponent() {
-            try? fileManager.removeItem(at: tempDir)
+        // Clean up test backup directory
+        if let backupDir = testBackupDir?.deletingLastPathComponent() {
+            try? FileManager.default.removeItem(at: backupDir)
         }
 
-        UserDefaults.standard.removeObject(forKey: "lastBackupDate")
+        // Clear pendingRestorePath to prevent affecting next app launch
+        UserDefaults.standard.removeObject(forKey: "pendingRestorePath")
+
+        // Clean up test defaults
+        testDefaults.removePersistentDomain(forName: testSuiteName)
+
+        testBackupDir = nil
+        testDB = nil
+        testDefaults = nil
+        backupService = nil
+
         super.tearDown()
     }
 
@@ -46,112 +62,125 @@ final class BackupServiceTests: XCTestCase {
     func testBackupInfoFormattedSize() throws {
         let backupInfo = BackupInfo(url: URL(fileURLWithPath: "/test.sqlite"), date: Date(), size: 1024)
 
-        // Should format as "1 KB" or similar
+        // Should format as KB or bytes
         XCTAssertTrue(backupInfo.formattedSize.contains("KB") || backupInfo.formattedSize.contains("bytes"))
     }
 
-    func testBackupInfoLargeSize() throws {
+    func testBackupInfoLargeSizeFormatsAsMB() throws {
         let backupInfo = BackupInfo(url: URL(fileURLWithPath: "/test.sqlite"), date: Date(), size: 5_242_880) // 5 MB
 
-        // Should format as MB
         XCTAssertTrue(backupInfo.formattedSize.contains("MB"))
     }
 
     // MARK: - List Backups Tests
 
     func testListBackupsReturnsEmptyWhenNoBackups() throws {
-        // BackupService.shared uses real app support directory, so we can't easily test it
-        // This test documents expected behavior
         let backups = backupService.listBackups()
-
-        // Should return array (might be empty or contain real backups)
-        XCTAssertNotNil(backups)
+        XCTAssertTrue(backups.isEmpty)
     }
 
     func testListBackupsSortsNewestFirst() throws {
-        // Create test backup files with different dates
-        let oldDate = Date(timeIntervalSinceNow: -86400 * 2) // 2 days ago
-        let newDate = Date(timeIntervalSinceNow: -86400) // 1 day ago
+        // Create test database with some data
+        guard let dbQueue = testDB.getQueue() else {
+            XCTFail("Test database not available")
+            return
+        }
 
-        let oldBackup = testBackupDir.appendingPathComponent("2025-12-02_120000.sqlite")
-        let newBackup = testBackupDir.appendingPathComponent("2025-12-03_120000.sqlite")
+        try dbQueue.write { db in
+            try db.execute(sql: "INSERT INTO items (id, created_at, modified_at) VALUES ('item1', 1, 1)")
+        }
 
-        fileManager.createFile(atPath: oldBackup.path, contents: Data())
-        fileManager.createFile(atPath: newBackup.path, contents: Data())
+        // Create multiple backups
+        backupService.performBackup()
+        Thread.sleep(forTimeInterval: 0.1) // Ensure different timestamps
 
-        // Set file creation dates
-        try fileManager.setAttributes([.creationDate: oldDate], ofItemAtPath: oldBackup.path)
-        try fileManager.setAttributes([.creationDate: newDate], ofItemAtPath: newBackup.path)
+        try dbQueue.write { db in
+            try db.execute(sql: "INSERT INTO items (id, created_at, modified_at) VALUES ('item2', 2, 2)")
+        }
 
-        // List backups (note: this tests internal logic, not the service directly)
-        let files = try fileManager.contentsOfDirectory(at: testBackupDir, includingPropertiesForKeys: [.creationDateKey])
-        let backups = files
-            .filter { $0.pathExtension == "sqlite" }
-            .compactMap { url -> BackupInfo? in
-                guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
-                      let size = attributes[.size] as? Int64,
-                      let date = attributes[.creationDate] as? Date else {
-                    return nil
-                }
-                return BackupInfo(url: url, date: date, size: size)
-            }
-            .sorted { $0.date > $1.date }
+        backupService.performBackup()
+
+        // List backups
+        let backups = backupService.listBackups()
 
         XCTAssertEqual(backups.count, 2)
-        XCTAssertTrue(backups[0].date > backups[1].date, "Backups should be sorted newest first")
+        // Newest backup should be first
+        XCTAssertTrue(backups[0].date >= backups[1].date, "Backups should be sorted newest first")
+    }
+
+    func testListBackupsOnlyIncludesSQLiteFiles() throws {
+        let fileManager = FileManager.default
+
+        // Create a non-sqlite file in backup directory
+        let txtFile = testBackupDir.appendingPathComponent("readme.txt")
+        try "test".write(to: txtFile, atomically: true, encoding: .utf8)
+
+        // Create a sqlite backup
+        backupService.performBackup()
+
+        let backups = backupService.listBackups()
+
+        // Should only include .sqlite files
+        XCTAssertEqual(backups.count, 1)
+        XCTAssertTrue(backups[0].url.pathExtension == "sqlite")
     }
 
     // MARK: - Delete Backups Tests
 
     func testDeleteBackupsRemovesFiles() throws {
-        // Create test backup file
-        let backupPath = testBackupDir.appendingPathComponent("2025-12-04_120000.sqlite")
-        fileManager.createFile(atPath: backupPath.path, contents: Data())
+        // Create a backup
+        backupService.performBackup()
 
-        XCTAssertTrue(fileManager.fileExists(atPath: backupPath.path))
+        var backups = backupService.listBackups()
+        XCTAssertEqual(backups.count, 1)
+
+        let backupToDelete = backups[0]
 
         // Delete it
-        let backupInfo = BackupInfo(url: backupPath, date: Date(), size: 0)
-        backupService.deleteBackups([backupInfo])
+        backupService.deleteBackups([backupToDelete])
 
-        XCTAssertFalse(fileManager.fileExists(atPath: backupPath.path))
+        // Verify it's gone
+        backups = backupService.listBackups()
+        XCTAssertEqual(backups.count, 0)
     }
 
-    func testDeleteMultipleBackups() throws {
-        // Create multiple test backup files
-        let backup1 = testBackupDir.appendingPathComponent("2025-12-04_120000.sqlite")
-        let backup2 = testBackupDir.appendingPathComponent("2025-12-04_130000.sqlite")
-        let backup3 = testBackupDir.appendingPathComponent("2025-12-04_140000.sqlite")
+    func testDeleteMultipleBackupsKeepsOthers() throws {
+        // Create three backups
+        backupService.performBackup()
+        Thread.sleep(forTimeInterval: 0.1)
+        backupService.performBackup()
+        Thread.sleep(forTimeInterval: 0.1)
+        backupService.performBackup()
 
-        fileManager.createFile(atPath: backup1.path, contents: Data())
-        fileManager.createFile(atPath: backup2.path, contents: Data())
-        fileManager.createFile(atPath: backup3.path, contents: Data())
+        var backups = backupService.listBackups()
+        XCTAssertEqual(backups.count, 3)
 
-        let backupInfos = [
-            BackupInfo(url: backup1, date: Date(), size: 0),
-            BackupInfo(url: backup2, date: Date(), size: 0),
-        ]
+        // Delete first two
+        let toDelete = Array(backups[0...1])
+        backupService.deleteBackups(toDelete)
 
-        backupService.deleteBackups(backupInfos)
-
-        XCTAssertFalse(fileManager.fileExists(atPath: backup1.path))
-        XCTAssertFalse(fileManager.fileExists(atPath: backup2.path))
-        XCTAssertTrue(fileManager.fileExists(atPath: backup3.path), "Should not delete backup3")
+        // Should have one remaining
+        backups = backupService.listBackups()
+        XCTAssertEqual(backups.count, 1)
     }
 
     // MARK: - Restore Scheduling Tests
 
-    func testRestoreSchedulesSavedToUserDefaults() throws {
-        let backupPath = testBackupDir.appendingPathComponent("2025-12-04_120000.sqlite")
-        fileManager.createFile(atPath: backupPath.path, contents: Data())
+    func testRestoreSchedulesSavesToUserDefaults() throws {
+        // Create a backup
+        backupService.performBackup()
 
-        let backupInfo = BackupInfo(url: backupPath, date: Date(), size: 1024)
+        let backups = backupService.listBackups()
+        XCTAssertEqual(backups.count, 1)
 
-        try backupService.restore(from: backupInfo)
+        // Schedule restore
+        try backupService.restore(from: backups[0])
 
-        // Verify the restore path was saved
+        // Verify the restore path was saved to UserDefaults.standard
+        // (Database.scheduleRestore uses UserDefaults.standard)
         let pendingPath = UserDefaults.standard.string(forKey: "pendingRestorePath")
-        XCTAssertEqual(pendingPath, backupPath.path)
+        XCTAssertNotNil(pendingPath)
+        XCTAssertEqual(pendingPath, backups[0].url.path)
     }
 
     func testRestoreThrowsErrorWhenBackupNotFound() throws {
@@ -168,44 +197,59 @@ final class BackupServiceTests: XCTestCase {
 
     // MARK: - Automatic Backup Tests
 
+    func testCheckAndBackupIfNeededCreatesBackupWhenNoLastBackup() throws {
+        // No last backup date set
+        let initialBackups = backupService.listBackups()
+        XCTAssertEqual(initialBackups.count, 0)
+
+        // Should create backup
+        backupService.checkAndBackupIfNeeded()
+
+        let backups = backupService.listBackups()
+        XCTAssertEqual(backups.count, 1)
+
+        // Should have set lastBackupDate
+        let lastBackup = testDefaults.object(forKey: "lastBackupDate") as? Date
+        XCTAssertNotNil(lastBackup)
+    }
+
     func testCheckAndBackupIfNeededSkipsRecentBackup() throws {
         // Set last backup to 1 hour ago
         let oneHourAgo = Date(timeIntervalSinceNow: -3600)
-        UserDefaults.standard.set(oneHourAgo, forKey: "lastBackupDate")
+        testDefaults.set(oneHourAgo, forKey: "lastBackupDate")
 
-        // This should skip backup (can't easily verify without mocking database)
+        let initialBackups = backupService.listBackups()
+        XCTAssertEqual(initialBackups.count, 0)
+
+        // Should skip backup
         backupService.checkAndBackupIfNeeded()
 
-        // Verify last backup date unchanged
-        let lastBackup = UserDefaults.standard.object(forKey: "lastBackupDate") as? Date
-        XCTAssertNotNil(lastBackup)
-        if let lastBackup = lastBackup {
-            XCTAssertEqual(lastBackup.timeIntervalSince1970, oneHourAgo.timeIntervalSince1970, accuracy: 1.0)
-        }
+        let backups = backupService.listBackups()
+        XCTAssertEqual(backups.count, 0)
+
+        // Last backup date should be unchanged
+        let lastBackup = testDefaults.object(forKey: "lastBackupDate") as? Date
+        XCTAssertEqual(lastBackup?.timeIntervalSince1970, oneHourAgo.timeIntervalSince1970, accuracy: 1.0)
     }
 
     func testCheckAndBackupIfNeededPerformsBackupAfter24Hours() throws {
         // Set last backup to 25 hours ago
         let twentyFiveHoursAgo = Date(timeIntervalSinceNow: -25 * 3600)
-        UserDefaults.standard.set(twentyFiveHoursAgo, forKey: "lastBackupDate")
+        testDefaults.set(twentyFiveHoursAgo, forKey: "lastBackupDate")
 
-        // This should perform backup (but will fail without real database)
-        // We're just testing the logic, not the actual backup
+        let initialBackups = backupService.listBackups()
+        XCTAssertEqual(initialBackups.count, 0)
+
+        // Should perform backup
         backupService.checkAndBackupIfNeeded()
 
-        // If backup succeeded, lastBackupDate would be updated
-        // Since we don't have real database, it won't update
-        // This test documents expected behavior
-    }
+        let backups = backupService.listBackups()
+        XCTAssertEqual(backups.count, 1)
 
-    func testCheckAndBackupIfNeededPerformsBackupWhenNoLastBackup() throws {
-        // No last backup date set
-        UserDefaults.standard.removeObject(forKey: "lastBackupDate")
-
-        // Should attempt backup (will fail without real database)
-        backupService.checkAndBackupIfNeeded()
-
-        // Test documents expected behavior
+        // Last backup date should be updated
+        let lastBackup = testDefaults.object(forKey: "lastBackupDate") as? Date
+        XCTAssertNotNil(lastBackup)
+        XCTAssertTrue(lastBackup! > twentyFiveHoursAgo)
     }
 
     // MARK: - Threshold Tests
@@ -228,40 +272,52 @@ final class BackupServiceTests: XCTestCase {
     // MARK: - Integration Tests
 
     func testBackupWorkflowWithRealDatabase() throws {
-        // Create a real test database
-        let dbQueue = try DatabaseQueue(path: testDBPath.path)
+        guard let dbQueue = testDB.getQueue() else {
+            XCTFail("Test database not available")
+            return
+        }
+
+        // Add some test data
         try dbQueue.write { db in
-            try db.execute(sql: "CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)")
-            try db.execute(sql: "INSERT INTO test (value) VALUES ('test data')")
+            try db.execute(sql: "INSERT INTO items (id, created_at, modified_at) VALUES ('test1', 1, 1)")
+            try db.execute(sql: "INSERT INTO items (id, created_at, modified_at) VALUES ('test2', 2, 2)")
         }
 
-        // Create backup using GRDB backup API
-        let backupPath = testBackupDir.appendingPathComponent("test_backup.sqlite")
-        try dbQueue.backup(to: DatabaseQueue(path: backupPath.path))
+        // Perform backup
+        backupService.performBackup()
 
-        // Verify backup exists and has content
-        XCTAssertTrue(fileManager.fileExists(atPath: backupPath.path))
+        // Verify backup exists
+        let backups = backupService.listBackups()
+        XCTAssertEqual(backups.count, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: backups[0].url.path))
 
-        let backupQueue = try DatabaseQueue(path: backupPath.path)
+        // Verify backup contains data
+        let backupQueue = try DatabaseQueue(path: backups[0].url.path)
         let count = try backupQueue.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM test")
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM items")
         }
-
-        XCTAssertEqual(count, 1)
+        XCTAssertEqual(count, 2)
     }
 
-    func testBackupDateFormatterFormat() throws {
-        // Test the date format used for backup filenames
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd_HHmmss"
+    func testBackupDateFormatterCreatesValidFilenames() throws {
+        backupService.performBackup()
 
-        let date = Date(timeIntervalSince1970: 1701734445) // 2023-12-04 15:30:45 UTC
-        let formatted = dateFormatter.string(from: date)
+        let backups = backupService.listBackups()
+        XCTAssertEqual(backups.count, 1)
+
+        let filename = backups[0].filename
 
         // Should match format: yyyy-MM-dd_HHmmss
-        XCTAssertTrue(formatted.contains("-"))
-        XCTAssertTrue(formatted.contains("_"))
-        let components = formatted.split(separator: "_")
-        XCTAssertEqual(components.count, 2)
+        XCTAssertTrue(filename.contains("-"))
+        XCTAssertTrue(filename.contains("_"))
+
+        let components = filename.split(separator: "_")
+        XCTAssertEqual(components.count, 2, "Filename should have date and time separated by underscore")
+
+        let dateComponent = String(components[0])
+        XCTAssertEqual(dateComponent.count, 10, "Date component should be yyyy-MM-dd (10 chars)")
+
+        let timeComponent = String(components[1])
+        XCTAssertEqual(timeComponent.count, 6, "Time component should be HHmmss (6 chars)")
     }
 }
