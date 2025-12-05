@@ -3,10 +3,12 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var settings: UserSettings
     @ObservedObject var store: ItemStore
+    @StateObject private var backupService = BackupService.shared
     @Environment(\.dismiss) var dismiss
     @State private var quickCaptureFolderId: String?
     @State private var archiveFolderId: String?
     @State private var showingTagManager: Bool = false
+    @State private var showingBackupManager: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -60,6 +62,26 @@ struct SettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+            }
+
+            Section("Backups") {
+                Button(action: { showingBackupManager = true }) {
+                    HStack {
+                        Text("Manage Backups")
+                        Spacer()
+                        Text("\(backupService.listBackups().count) backups")
+                            .foregroundColor(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Button("Backup Now") {
+                    backupService.performBackup()
+                }
             }
 
             Section("Debug (Temporary)") {
@@ -120,6 +142,17 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingTagManager) {
             TagManagerView(store: store)
+        }
+        .sheet(isPresented: $showingBackupManager) {
+            BackupManagerView()
+        }
+        .alert("Too Many Backups", isPresented: $backupService.showBackupCleanupPrompt) {
+            Button("Manage Backups") {
+                showingBackupManager = true
+            }
+            Button("Later", role: .cancel) {}
+        } message: {
+            Text("You have \(backupService.backupCount) backups. Would you like to delete some old ones?")
         }
     }
 

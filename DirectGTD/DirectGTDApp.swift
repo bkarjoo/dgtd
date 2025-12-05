@@ -18,6 +18,10 @@ struct DirectGTDApp: App {
         // Initialize database on app launch
         _ = Database.shared
         NSLog("DirectGTDApp: Database initialized")
+
+        // Start automatic backups (checks on launch + 24-hour timer)
+        BackupService.shared.startAutomaticBackups()
+        NSLog("DirectGTDApp: Backup service started")
     }
 
     var body: some Scene {

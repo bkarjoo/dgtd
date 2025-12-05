@@ -10,6 +10,8 @@ public protocol DatabaseProvider {
 open class Database: DatabaseProvider {
     public static let shared = Database()
 
+    private static let pendingRestoreKey = "pendingRestorePath"
+
     private lazy var dbQueue: DatabaseQueue? = {
         do {
             let fileManager = FileManager.default
@@ -23,6 +25,13 @@ open class Database: DatabaseProvider {
             try fileManager.createDirectory(at: appFolder, withIntermediateDirectories: true)
             let dbPath = appFolder.appendingPathComponent("directgtd.sqlite").path
 
+            // Check for pending restore before opening database
+            if let pendingPath = UserDefaults.standard.string(forKey: Database.pendingRestoreKey) {
+                NSLog("Database: Found pending restore from \(pendingPath)")
+                Database.performPendingRestore(from: pendingPath, to: dbPath, fileManager: fileManager)
+                UserDefaults.standard.removeObject(forKey: Database.pendingRestoreKey)
+            }
+
             NSLog("Database: Initializing at path: \(dbPath)")
 
             let queue = try DatabaseQueue(path: dbPath)
@@ -35,6 +44,51 @@ open class Database: DatabaseProvider {
             fatalError("Failed to initialize database: \(error)")
         }
     }()
+
+    private static func performPendingRestore(from backupPath: String, to dbPath: String, fileManager: FileManager) {
+        let walPath = dbPath + "-wal"
+        let shmPath = dbPath + "-shm"
+        let tempPath = dbPath + ".restore_tmp"
+
+        guard fileManager.fileExists(atPath: backupPath) else {
+            NSLog("Database: Pending restore skipped - backup missing at \(backupPath)")
+            return
+        }
+
+        do {
+            // Copy backup to a temporary location first so we never delete the live DB before a successful copy
+            if fileManager.fileExists(atPath: tempPath) {
+                try fileManager.removeItem(atPath: tempPath)
+            }
+            try fileManager.copyItem(atPath: backupPath, toPath: tempPath)
+
+            // Remove existing database files
+            if fileManager.fileExists(atPath: dbPath) {
+                try fileManager.removeItem(atPath: dbPath)
+            }
+            if fileManager.fileExists(atPath: walPath) {
+                try fileManager.removeItem(atPath: walPath)
+            }
+            if fileManager.fileExists(atPath: shmPath) {
+                try fileManager.removeItem(atPath: shmPath)
+            }
+
+            // Move restored database into place
+            try fileManager.moveItem(atPath: tempPath, toPath: dbPath)
+            NSLog("Database: Restore completed successfully from \(backupPath)")
+        } catch {
+            // Ensure temporary file is cleaned up if anything failed
+            try? fileManager.removeItem(atPath: tempPath)
+            NSLog("Database: Restore failed - \(error)")
+            // Continue with whatever database state exists
+        }
+    }
+
+    /// Schedule a restore to happen on next app launch
+    static func scheduleRestore(from backupPath: String) {
+        UserDefaults.standard.set(backupPath, forKey: pendingRestoreKey)
+        NSLog("Database: Scheduled restore from \(backupPath) for next launch")
+    }
 
     public init() {}
 
