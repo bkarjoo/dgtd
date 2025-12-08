@@ -674,6 +674,135 @@ DirectGTD supports comprehensive undo/redo for all major operations.
 
 ---
 
+## iCloud Sync
+
+**Sync your data across all your Macs automatically.**
+
+DirectGTD uses iCloud to keep your tasks, projects, and notes in sync across all your devices. Works automatically in the background - no manual sync needed.
+
+**How It Works:**
+- **CloudKit Private Database** - Your data stays private in your iCloud account
+- **Automatic sync** - Changes sync immediately when you edit
+- **Conflict resolution** - Last write wins (based on modification time)
+- **Efficient** - Only syncs what changed (dirty tracking)
+- **Reliable** - Automatic retry with exponential backoff if network fails
+
+**Initial Setup:**
+1. Make sure you're signed in to iCloud (System Settings → Apple ID)
+2. First launch syncs all existing data to iCloud
+3. **Progress overlay** shows sync status during first sync
+4. Subsequent syncs happen automatically in background
+
+**Sync Status (Toolbar):**
+- ☁️✓ **Green checkmark** - Everything synced, up to date
+- ⚙️ **Spinner** - Sync in progress
+- ☁️⚠️ **Red exclamation** - Sync error (check iCloud account)
+- ☁️/ **Slash icon** - Sync disabled
+
+**Settings (Settings → iCloud Sync):**
+- **Enable iCloud Sync** toggle - Turn sync on/off
+- **Sync Now** button - Force immediate sync
+- **Account name** - Shows which iCloud account is active
+- **Last sync** - Shows when last sync completed
+- **Reset Sync State** - Clear metadata and re-sync (debugging only)
+
+**Manual Sync:**
+- Click sync menu button in toolbar
+- Select **"Sync Now"**
+- Useful after being offline for a while
+
+**Sync States:**
+
+**Disabled:**
+- User toggled sync off in Settings, OR
+- No iCloud account signed in
+- Data stays local only
+
+**Idle:**
+- Everything synced successfully
+- Watching for local changes
+- Watching for remote changes (via CloudKit push notifications)
+
+**Syncing:**
+- Uploading local changes to iCloud
+- Downloading remote changes from other devices
+- Usually completes in seconds
+
+**Initial Sync:**
+- First-time setup sync
+- Shows progress overlay (0-100%)
+- Uploads all existing data
+- Can take several minutes for large databases
+
+**Error:**
+- Network issue, iCloud quota full, or account problem
+- Shows error message in sync menu
+- Automatically retries with exponential backoff
+
+**Conflict Resolution:**
+
+DirectGTD uses **last-write-wins** conflict resolution:
+- If same item edited on two devices simultaneously
+- Most recent modification (based on `modifiedAt` timestamp) wins
+- Simple, predictable, no merge conflicts
+- Works well for single-user workflows
+
+**What Gets Synced:**
+- ✓ All items (tasks, notes, folders, projects)
+- ✓ Tags and tag assignments
+- ✓ Time entries (tracked time)
+- ✓ Due dates and start times
+- ✓ Completion status
+- ✓ Notes/descriptions
+- ✓ Hierarchy (parent-child relationships)
+- ✓ Sort order
+- ✗ Settings (font size, margins) - These stay per-device
+- ✗ UI state (selection, expansion) - These stay per-device
+
+**Deleted Items (Tombstones):**
+- Deletions sync across devices
+- Tombstone records kept for 30 days
+- After 30 days, tombstones cleaned up automatically
+- Prevents deleted items from reappearing on old devices
+
+**Periodic Sync (Fallback):**
+- Automatic sync every 5 minutes
+- Backup mechanism when push notifications don't work
+- Ensures sync happens even without network push
+
+**Troubleshooting:**
+
+**"iCloud not available":**
+- Sign in to iCloud in System Settings
+- Make sure iCloud Drive is enabled
+- Check internet connection
+
+**Sync stuck:**
+- Force quit and relaunch DirectGTD
+- Use "Sync Now" button in settings
+- Check iCloud system status at apple.com/support/systemstatus
+
+**Data not syncing:**
+- Check iCloud storage (Settings → Apple ID)
+- Make sure both devices have sync enabled
+- Wait a few minutes (changes may be queued)
+
+**Reset sync state:**
+- Settings → iCloud Sync → Reset Sync State
+- Clears all sync metadata
+- Re-syncs everything from scratch
+- Use only if sync is broken
+
+**Pro tip:** Leave sync enabled and forget about it. DirectGTD handles everything automatically. You'll only notice sync when you open DirectGTD on a different Mac and see your latest changes already there.
+
+*[Screenshot: Sync status in toolbar showing synced state]*
+
+*[Screenshot: Settings → iCloud Sync section]*
+
+*[Screenshot: Initial sync progress overlay]*
+
+---
+
 ## Settings & Customization
 
 Click the **gear icon (⚙️)** in the toolbar to access settings:
@@ -763,6 +892,7 @@ All settings **persist across sessions**.
 DirectGTD follows one principle: **Get out of your way.**
 
 **What we have:**
+- **iCloud sync** - Automatic background sync across all your Macs
 - **Time tracking** - Built-in timers for tracking work sessions on any item
 - **SQL search** - Raw SQLite queries for power users who want ultimate control
 - **Due dates & start times** - Track deadlines and defer work with visual badges
@@ -770,14 +900,14 @@ DirectGTD follows one principle: **Get out of your way.**
 - **Search** - Instant filtering to find anything
 - **Hierarchy** - Folders and projects with unlimited nesting
 - **Keyboard-first** - Every core action has a shortcut (but drag-and-drop available too)
-- **Local storage** - Your data stays yours
+- **Local storage** - Your data stays yours (synced via your private iCloud)
 
 **What we deliberately don't have:**
 - No right-click menus (keeps it simple)
-- No cloud sync (no synchronization anxiety)
 - No AI suggestions (you know your work best)
 - No social features (this is your personal system)
 - No recurring tasks (single-instance simplicity)
+- No third-party cloud sync (iCloud only - keeps it simple)
 
 Fast, focused, friction-free. If you need calendars, reminders, team collaboration, or AI assistance... you probably need a different app.
 
@@ -841,6 +971,18 @@ A: Time entries are automatically deleted (cascade delete). If you undo the dele
 
 **Q: Does the timer keep running if I switch to a different item?**
 A: Yes! Timers keep running even when you select a different item or close DetailView. You can have multiple timers running across different items.
+
+**Q: How does iCloud sync work? Do I need to do anything?**
+A: No! Just sign in to iCloud and sync happens automatically. First launch syncs all data with progress overlay. After that, changes sync immediately in the background.
+
+**Q: Can I use DirectGTD without iCloud sync?**
+A: Yes! Toggle "Enable iCloud Sync" off in Settings → iCloud Sync. Your data stays completely local. You can enable sync later without losing data.
+
+**Q: What happens if I edit the same item on two devices at once?**
+A: Last-write-wins. The most recent edit (based on modification timestamp) wins. Simple, predictable conflict resolution that works well for single-user workflows.
+
+**Q: Does sync work on iOS/iPad?**
+A: Not yet. DirectGTD is Mac-only currently, but syncs across multiple Macs. iOS/iPad versions may come later.
 
 **Q: How do I check off tasks with keyboard?**
 A: Press period (.) when a task is selected. No mouse needed!
@@ -915,6 +1057,18 @@ Questions? Found a bug? Want to contribute?
 **Version 2.1** | Made for humans who type faster than they click (but can drag too)
 
 ### What's New in 2.1
+
+**🎉 iCloud Sync** - Automatic sync across all your Macs!
+- **CloudKit private database** - Your data stays private in your iCloud account
+- **Automatic background sync** - Changes sync immediately when you edit
+- **Initial sync with progress** - First-time setup shows 0-100% progress overlay
+- **Conflict resolution** - Last-write-wins based on modification time
+- **Sync status indicator** - Toolbar shows sync state (synced/syncing/error/disabled)
+- **Manual sync** - Force sync with "Sync Now" button
+- **Efficient** - Only syncs what changed (dirty tracking + change tokens)
+- **Reliable** - Auto-retry with exponential backoff, periodic fallback sync every 5 min
+- **Tombstone cleanup** - Deleted items sync across devices, cleaned after 30 days
+- **Toggle on/off** - Disable sync in Settings if you prefer local-only
 
 **🎉 Time Tracking** - Built-in time tracking for any item!
 - **Start/stop timers** with play/stop buttons in DetailView
