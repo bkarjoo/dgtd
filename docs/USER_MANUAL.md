@@ -803,9 +803,84 @@ DirectGTD uses **last-write-wins** conflict resolution:
 
 ---
 
+## Automatic Backups
+
+**Your data is automatically backed up.**
+
+DirectGTD creates automatic backups of your database to protect against data loss. No configuration needed - it just works.
+
+**Two-Tier Backup System:**
+
+**Hourly Backups:**
+- Created every hour when app is running
+- Kept for 2 days, then auto-deleted
+- Perfect for recovering from recent mistakes
+- Location: `~/Library/Application Support/DirectGTD/backups/hourly/`
+
+**Daily Backups:**
+- Created every 24 hours
+- Kept indefinitely (prompt when count exceeds 30)
+- Perfect for long-term recovery
+- Location: `~/Library/Application Support/DirectGTD/backups/daily/`
+
+**Backup Manager:**
+
+Access via **Settings → Manage Backups**
+
+**Features:**
+- **List all backups** - Shows timestamp and type (Hourly/Daily)
+- **Backup count** - Shows total number of backups
+- **Restore** - Select backup and restore (requires restart)
+- **Delete** - Remove old backups to save space
+- **Type badges** - Blue = Daily, Gray = Hourly
+
+**Restoring from Backup:**
+1. Open Settings → Manage Backups
+2. Select backup to restore
+3. Click **Restore**
+4. Confirm restoration
+5. **Quit and relaunch** DirectGTD
+6. Database restored from selected backup
+
+**How Restore Works:**
+- Schedules file swap for next launch (avoids locked database issues)
+- Creates backup of current database before restoring
+- Requires app relaunch to complete restoration
+- Safe - always creates backup before replacing
+
+**Backup Cleanup:**
+- Hourly backups auto-delete after 2 days
+- Daily backups kept until count exceeds 30
+- When >30 daily backups, app prompts for cleanup
+- You can manually delete backups anytime
+
+**Backup File Format:**
+- Timestamped: `yyyy-MM-dd_HHmmss.sqlite`
+- Example: `2025-12-10_143022.sqlite`
+- Allows multiple backups per day
+- Easy to identify by date/time
+
+**Pro tip:** Backups happen automatically. You only need Backup Manager when restoring from a specific point in time or cleaning up old backups.
+
+*[Screenshot: Backup Manager showing list of daily and hourly backups]*
+
+---
+
 ## Settings & Customization
 
 Click the **gear icon (⚙️)** in the toolbar to access settings:
+
+**iCloud Sync:**
+- **Enable iCloud Sync** - Toggle sync on/off
+- **Sync Now** - Force immediate sync
+- **Account name** - Shows active iCloud account
+- **Last sync** - Time since last successful sync
+- **Reset Sync State** - Debug option to clear and re-sync
+
+**Backups:**
+- **Manage Backups** - List, restore, and delete backups
+- Shows backup count next to button
+- Automatic hourly and daily backups
 
 **Visual Settings:**
 - **Font Size** - Adjust text size (also: Cmd+/Cmd-/Cmd0)
@@ -1417,6 +1492,15 @@ DirectGTD for iOS is **offline-first:**
 **Version 2.1** | Made for humans who type faster than they click (but can drag too)
 
 ### What's New in 2.1
+
+**🎉 Automatic Backups** - Two-tier backup system protects your data!
+- **Hourly backups** - Created every hour, auto-deleted after 2 days
+- **Daily backups** - Created every 24 hours, kept indefinitely (prompt at 30+)
+- **Backup Manager** - List, restore, and delete backups from Settings
+- **Safe restore** - Creates backup before restoring, requires app relaunch
+- **Type badges** - Blue for daily, gray for hourly backups
+- **No configuration** - Works automatically in background
+- **Timestamped files** - Easy to identify by date and time
 
 **🎉 iCloud Sync** - Automatic sync across all your Macs!
 - **CloudKit private database** - Your data stays private in your iCloud account
