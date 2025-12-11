@@ -167,7 +167,13 @@ struct ItemRowView: View {
             .padding(.leading, CGFloat(depth) * 20)
             .contentShape(Rectangle())
             .onTapGesture {
-                viewModel.focusedItemId = item.id
+                if item.itemType == .note {
+                    // Notes open in editor view
+                    viewModel.editingNoteId = item.id
+                } else {
+                    // Other items focus in tree
+                    viewModel.focusedItemId = item.id
+                }
             }
             .background(viewModel.selectedItemId == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
             .contextMenu {
@@ -282,6 +288,7 @@ class TreeViewModel: ObservableObject {
     @Published var expandedItemIds: Set<String> = []
     @Published var selectedItemId: String?
     @Published var focusedItemId: String?
+    @Published var editingNoteId: String?  // When set, show note editor
     @Published var isLoading: Bool = false
     @Published var syncError: String?
 

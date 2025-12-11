@@ -105,7 +105,47 @@ struct ContentView: View {
         isSearchMode && !searchText.isEmpty
     }
 
+    /// The note item being edited, if any
+    private var editingNote: Item? {
+        guard let noteId = viewModel.editingNoteId else { return nil }
+        return viewModel.items.first { $0.id == noteId }
+    }
+
     var body: some View {
+        Group {
+            // Note editor view - replaces entire UI when editing a note
+            if let note = editingNote {
+                NoteEditorView(item: note)
+            } else {
+                // Normal tree view
+                mainTreeView
+            }
+        }
+        .environmentObject(viewModel)
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
+                .environmentObject(viewModel)
+        }
+        .sheet(isPresented: $showingQuickCapture) {
+            QuickCaptureView()
+                .environmentObject(viewModel)
+        }
+        .task {
+            await viewModel.syncAndReload()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            handleScenePhaseChange(newPhase)
+        }
+        .onChange(of: isSearchFieldFocused) { _, focused in
+            if !focused && isSearchMode {
+                exitSearchMode()
+            }
+        }
+    }
+
+    // MARK: - Main Tree View
+
+    private var mainTreeView: some View {
         VStack(spacing: 0) {
             // Header bar - hidden in search mode
             if !isSearchMode {
@@ -161,52 +201,35 @@ struct ContentView: View {
                 searchBar
             }
         }
-        .environmentObject(viewModel)
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
-                .environmentObject(viewModel)
-        }
-        .sheet(isPresented: $showingQuickCapture) {
-            QuickCaptureView()
-                .environmentObject(viewModel)
-        }
-        .task {
-            await viewModel.syncAndReload()
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            switch newPhase {
-            case .background:
-                let application = UIApplication.shared
-                var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    }
 
-                backgroundTaskID = application.beginBackgroundTask(withName: "DirectGTD Sync") {
-                    if backgroundTaskID != .invalid {
-                        application.endBackgroundTask(backgroundTaskID)
-                        backgroundTaskID = .invalid
-                    }
-                }
+    private func handleScenePhaseChange(_ newPhase: ScenePhase) {
+        switch newPhase {
+        case .background:
+            let application = UIApplication.shared
+            var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
 
-                Task {
-                    await viewModel.syncAndReload()
-                    if backgroundTaskID != .invalid {
-                        application.endBackgroundTask(backgroundTaskID)
-                    }
+            backgroundTaskID = application.beginBackgroundTask(withName: "DirectGTD Sync") {
+                if backgroundTaskID != .invalid {
+                    application.endBackgroundTask(backgroundTaskID)
+                    backgroundTaskID = .invalid
                 }
-            case .active:
-                Task {
-                    await viewModel.syncAndReload()
+            }
+
+            Task {
+                await viewModel.syncAndReload()
+                if backgroundTaskID != .invalid {
+                    application.endBackgroundTask(backgroundTaskID)
                 }
-            case .inactive:
-                break
-            @unknown default:
-                break
             }
-        }
-        .onChange(of: isSearchFieldFocused) { _, focused in
-            // When keyboard is dismissed, exit search mode
-            if !focused && isSearchMode {
-                exitSearchMode()
+        case .active:
+            Task {
+                await viewModel.syncAndReload()
             }
+        case .inactive:
+            break
+        @unknown default:
+            break
         }
     }
 
