@@ -7,11 +7,31 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1E4C761F2EE87A3A004748ED /* DirectGTDCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1E4C761E2EE87A3A004748ED /* DirectGTDCore */; };
 		1EA486A92EC443DF0017F6CA /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 1EA486A82EC443DF0017F6CA /* GRDB */; };
 		1EA486AC2EC443E00017F6CA /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 1EA486AB2EC443E00017F6CA /* MarkdownUI */; };
+		1EA486B02EC5000000000001 /* DirectGTDCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1EA486B12EC5000000000001 /* DirectGTDCore */; };
+		1EF674C72EE7C50200BB5B6F /* DirectGTDCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1EA486B42EC5000000000003 /* DirectGTDCore */; };
+		1EF674C82EE7C50200BB5B6F /* DirectGTDCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1EA486B52EC5000000000004 /* DirectGTDCore */; };
+		1EF675352EE8432300BB5B6F /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 1EF675342EE8432300BB5B6F /* GRDB */; };
+		1EF675372EE846FD00BB5B6F /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 1EF675362EE846FD00BB5B6F /* GRDB */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		1E4C76042EE86FA5004748ED /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1EA486692EC43FAA0017F6CA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1E4C75F62EE86FA3004748ED;
+			remoteInfo = "DirectGTD-iOS";
+		};
+		1E4C760E2EE86FA5004748ED /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1EA486692EC43FAA0017F6CA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1E4C75F62EE86FA3004748ED;
+			remoteInfo = "DirectGTD-iOS";
+		};
 		1EA4867F2EC43FAD0017F6CA /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 1EA486692EC43FAA0017F6CA /* Project object */;
@@ -29,9 +49,13 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		1E4C75F72EE86FA3004748ED /* DirectGTD-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DirectGTD-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		1E4C76032EE86FA5004748ED /* DirectGTD-iOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DirectGTD-iOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		1E4C760D2EE86FA5004748ED /* DirectGTD-iOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DirectGTD-iOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1EA486712EC43FAA0017F6CA /* DirectGTD.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DirectGTD.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1EA4867E2EC43FAD0017F6CA /* DirectGTDTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DirectGTDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1EA486882EC43FAD0017F6CA /* DirectGTDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DirectGTDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1EA486B22EC5000000000001 /* DirectGTDCore */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = DirectGTDCore; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -45,6 +69,21 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		1E4C75F82EE86FA3004748ED /* DirectGTD-iOS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "DirectGTD-iOS";
+			sourceTree = "<group>";
+		};
+		1E4C76062EE86FA5004748ED /* DirectGTD-iOSTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "DirectGTD-iOSTests";
+			sourceTree = "<group>";
+		};
+		1E4C76102EE86FA5004748ED /* DirectGTD-iOSUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "DirectGTD-iOSUITests";
+			sourceTree = "<group>";
+		};
 		1EA486732EC43FAA0017F6CA /* DirectGTD */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -61,12 +100,35 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		1E4C75F42EE86FA3004748ED /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1E4C761F2EE87A3A004748ED /* DirectGTDCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1E4C76002EE86FA5004748ED /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1E4C760A2EE86FA5004748ED /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1EA4866E2EC43FAA0017F6CA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				1EA486A92EC443DF0017F6CA /* GRDB in Frameworks */,
 				1EA486AC2EC443E00017F6CA /* MarkdownUI in Frameworks */,
+				1EA486B02EC5000000000001 /* DirectGTDCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,6 +136,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1EF674C72EE7C50200BB5B6F /* DirectGTDCore in Frameworks */,
+				1EF675372EE846FD00BB5B6F /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -81,6 +145,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1EF674C82EE7C50200BB5B6F /* DirectGTDCore in Frameworks */,
+				1EF675352EE8432300BB5B6F /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -90,8 +156,14 @@
 		1EA486682EC43FAA0017F6CA = {
 			isa = PBXGroup;
 			children = (
+				1EA486B22EC5000000000001 /* DirectGTDCore */,
+				1EA486730EC43FAA0017F6CA /* Packages */,
 				1EA486732EC43FAA0017F6CA /* DirectGTD */,
 				1EA486812EC43FAD0017F6CA /* DirectGTDTests */,
+				1E4C75F82EE86FA3004748ED /* DirectGTD-iOS */,
+				1E4C76062EE86FA5004748ED /* DirectGTD-iOSTests */,
+				1E4C76102EE86FA5004748ED /* DirectGTD-iOSUITests */,
+				1EF675332EE8432300BB5B6F /* Frameworks */,
 				1EA486722EC43FAA0017F6CA /* Products */,
 			);
 			sourceTree = "<group>";
@@ -102,13 +174,99 @@
 				1EA486712EC43FAA0017F6CA /* DirectGTD.app */,
 				1EA4867E2EC43FAD0017F6CA /* DirectGTDTests.xctest */,
 				1EA486882EC43FAD0017F6CA /* DirectGTDUITests.xctest */,
+				1E4C75F72EE86FA3004748ED /* DirectGTD-iOS.app */,
+				1E4C76032EE86FA5004748ED /* DirectGTD-iOSTests.xctest */,
+				1E4C760D2EE86FA5004748ED /* DirectGTD-iOSUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		1EA486730EC43FAA0017F6CA /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		1EF675332EE8432300BB5B6F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		1E4C75F62EE86FA3004748ED /* DirectGTD-iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1E4C761B2EE86FA5004748ED /* Build configuration list for PBXNativeTarget "DirectGTD-iOS" */;
+			buildPhases = (
+				1E4C75F32EE86FA3004748ED /* Sources */,
+				1E4C75F42EE86FA3004748ED /* Frameworks */,
+				1E4C75F52EE86FA3004748ED /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				1E4C75F82EE86FA3004748ED /* DirectGTD-iOS */,
+			);
+			name = "DirectGTD-iOS";
+			packageProductDependencies = (
+				1E4C761E2EE87A3A004748ED /* DirectGTDCore */,
+			);
+			productName = "DirectGTD-iOS";
+			productReference = 1E4C75F72EE86FA3004748ED /* DirectGTD-iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1E4C76022EE86FA5004748ED /* DirectGTD-iOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1E4C761C2EE86FA5004748ED /* Build configuration list for PBXNativeTarget "DirectGTD-iOSTests" */;
+			buildPhases = (
+				1E4C75FF2EE86FA5004748ED /* Sources */,
+				1E4C76002EE86FA5004748ED /* Frameworks */,
+				1E4C76012EE86FA5004748ED /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1E4C76052EE86FA5004748ED /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				1E4C76062EE86FA5004748ED /* DirectGTD-iOSTests */,
+			);
+			name = "DirectGTD-iOSTests";
+			packageProductDependencies = (
+			);
+			productName = "DirectGTD-iOSTests";
+			productReference = 1E4C76032EE86FA5004748ED /* DirectGTD-iOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		1E4C760C2EE86FA5004748ED /* DirectGTD-iOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1E4C761D2EE86FA5004748ED /* Build configuration list for PBXNativeTarget "DirectGTD-iOSUITests" */;
+			buildPhases = (
+				1E4C76092EE86FA5004748ED /* Sources */,
+				1E4C760A2EE86FA5004748ED /* Frameworks */,
+				1E4C760B2EE86FA5004748ED /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1E4C760F2EE86FA5004748ED /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				1E4C76102EE86FA5004748ED /* DirectGTD-iOSUITests */,
+			);
+			name = "DirectGTD-iOSUITests";
+			packageProductDependencies = (
+			);
+			productName = "DirectGTD-iOSUITests";
+			productReference = 1E4C760D2EE86FA5004748ED /* DirectGTD-iOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		1EA486702EC43FAA0017F6CA /* DirectGTD */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1EA486922EC43FAD0017F6CA /* Build configuration list for PBXNativeTarget "DirectGTD" */;
@@ -128,6 +286,7 @@
 			packageProductDependencies = (
 				1EA486A82EC443DF0017F6CA /* GRDB */,
 				1EA486AB2EC443E00017F6CA /* MarkdownUI */,
+				1EA486B12EC5000000000001 /* DirectGTDCore */,
 			);
 			productName = DirectGTD;
 			productReference = 1EA486712EC43FAA0017F6CA /* DirectGTD.app */;
@@ -151,6 +310,8 @@
 			);
 			name = DirectGTDTests;
 			packageProductDependencies = (
+				1EA486B42EC5000000000003 /* DirectGTDCore */,
+				1EF675362EE846FD00BB5B6F /* GRDB */,
 			);
 			productName = DirectGTDTests;
 			productReference = 1EA4867E2EC43FAD0017F6CA /* DirectGTDTests.xctest */;
@@ -171,6 +332,8 @@
 			);
 			name = DirectGTDUITests;
 			packageProductDependencies = (
+				1EA486B52EC5000000000004 /* DirectGTDCore */,
+				1EF675342EE8432300BB5B6F /* GRDB */,
 			);
 			productName = DirectGTDUITests;
 			productReference = 1EA486882EC43FAD0017F6CA /* DirectGTDUITests.xctest */;
@@ -186,6 +349,17 @@
 				LastSwiftUpdateCheck = 2610;
 				LastUpgradeCheck = 2610;
 				TargetAttributes = {
+					1E4C75F62EE86FA3004748ED = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
+					1E4C76022EE86FA5004748ED = {
+						CreatedOnToolsVersion = 26.1.1;
+						TestTargetID = 1E4C75F62EE86FA3004748ED;
+					};
+					1E4C760C2EE86FA5004748ED = {
+						CreatedOnToolsVersion = 26.1.1;
+						TestTargetID = 1E4C75F62EE86FA3004748ED;
+					};
 					1EA486702EC43FAA0017F6CA = {
 						CreatedOnToolsVersion = 26.1;
 					};
@@ -211,6 +385,7 @@
 			packageReferences = (
 				1EA486A72EC443DF0017F6CA /* XCRemoteSwiftPackageReference "GRDB" */,
 				1EA486AA2EC443E00017F6CA /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+				1EA486B32EC5000000000002 /* XCLocalSwiftPackageReference "DirectGTDCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1EA486722EC43FAA0017F6CA /* Products */;
@@ -220,11 +395,35 @@
 				1EA486702EC43FAA0017F6CA /* DirectGTD */,
 				1EA4867D2EC43FAD0017F6CA /* DirectGTDTests */,
 				1EA486872EC43FAD0017F6CA /* DirectGTDUITests */,
+				1E4C75F62EE86FA3004748ED /* DirectGTD-iOS */,
+				1E4C76022EE86FA5004748ED /* DirectGTD-iOSTests */,
+				1E4C760C2EE86FA5004748ED /* DirectGTD-iOSUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		1E4C75F52EE86FA3004748ED /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1E4C76012EE86FA5004748ED /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1E4C760B2EE86FA5004748ED /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1EA4866F2EC43FAA0017F6CA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -249,6 +448,27 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		1E4C75F32EE86FA3004748ED /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1E4C75FF2EE86FA5004748ED /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1E4C76092EE86FA5004748ED /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1EA4866D2EC43FAA0017F6CA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -273,6 +493,16 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		1E4C76052EE86FA5004748ED /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1E4C75F62EE86FA3004748ED /* DirectGTD-iOS */;
+			targetProxy = 1E4C76042EE86FA5004748ED /* PBXContainerItemProxy */;
+		};
+		1E4C760F2EE86FA5004748ED /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1E4C75F62EE86FA3004748ED /* DirectGTD-iOS */;
+			targetProxy = 1E4C760E2EE86FA5004748ED /* PBXContainerItemProxy */;
+		};
 		1EA486802EC43FAD0017F6CA /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 1EA486702EC43FAA0017F6CA /* DirectGTD */;
@@ -286,6 +516,175 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		1E4C76152EE86FA5004748ED /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "DirectGTD-iOS/DirectGTD-iOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = YJ76W2FDLJ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.zendegi.DirectGTD-iOS";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1E4C76162EE86FA5004748ED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "DirectGTD-iOS/DirectGTD-iOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = YJ76W2FDLJ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.zendegi.DirectGTD-iOS";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		1E4C76172EE86FA5004748ED /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = YJ76W2FDLJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.zendegi.DirectGTD-iOSTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DirectGTD-iOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DirectGTD-iOS";
+			};
+			name = Debug;
+		};
+		1E4C76182EE86FA5004748ED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = YJ76W2FDLJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.zendegi.DirectGTD-iOSTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DirectGTD-iOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DirectGTD-iOS";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		1E4C76192EE86FA5004748ED /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = YJ76W2FDLJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.zendegi.DirectGTD-iOSUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "DirectGTD-iOS";
+			};
+			name = Debug;
+		};
+		1E4C761A2EE86FA5004748ED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = YJ76W2FDLJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.zendegi.DirectGTD-iOSUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "DirectGTD-iOS";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		1EA486902EC43FAD0017F6CA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -407,6 +806,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DirectGTD/DirectGTD.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YJ76W2FDLJ;
@@ -452,6 +852,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DirectGTD/DirectGTD.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YJ76W2FDLJ;
@@ -597,6 +998,33 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		1E4C761B2EE86FA5004748ED /* Build configuration list for PBXNativeTarget "DirectGTD-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1E4C76152EE86FA5004748ED /* Debug */,
+				1E4C76162EE86FA5004748ED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1E4C761C2EE86FA5004748ED /* Build configuration list for PBXNativeTarget "DirectGTD-iOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1E4C76172EE86FA5004748ED /* Debug */,
+				1E4C76182EE86FA5004748ED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1E4C761D2EE86FA5004748ED /* Build configuration list for PBXNativeTarget "DirectGTD-iOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1E4C76192EE86FA5004748ED /* Debug */,
+				1E4C761A2EE86FA5004748ED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		1EA4866C2EC43FAA0017F6CA /* Build configuration list for PBXProject "DirectGTD" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -635,6 +1063,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		1EA486B32EC5000000000002 /* XCLocalSwiftPackageReference "DirectGTDCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = DirectGTDCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		1EA486A72EC443DF0017F6CA /* XCRemoteSwiftPackageReference "GRDB" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -655,6 +1090,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		1E4C761E2EE87A3A004748ED /* DirectGTDCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DirectGTDCore;
+		};
 		1EA486A82EC443DF0017F6CA /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 1EA486A72EC443DF0017F6CA /* XCRemoteSwiftPackageReference "GRDB" */;
@@ -664,6 +1103,31 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 1EA486AA2EC443E00017F6CA /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
+		};
+		1EA486B12EC5000000000001 /* DirectGTDCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1EA486B32EC5000000000002 /* XCLocalSwiftPackageReference "DirectGTDCore" */;
+			productName = DirectGTDCore;
+		};
+		1EA486B42EC5000000000003 /* DirectGTDCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1EA486B32EC5000000000002 /* XCLocalSwiftPackageReference "DirectGTDCore" */;
+			productName = DirectGTDCore;
+		};
+		1EA486B52EC5000000000004 /* DirectGTDCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1EA486B32EC5000000000002 /* XCLocalSwiftPackageReference "DirectGTDCore" */;
+			productName = DirectGTDCore;
+		};
+		1EF675342EE8432300BB5B6F /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1EA486A72EC443DF0017F6CA /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
+		};
+		1EF675362EE846FD00BB5B6F /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1EA486A72EC443DF0017F6CA /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

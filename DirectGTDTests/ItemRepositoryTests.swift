@@ -1,3 +1,4 @@
+import DirectGTDCore
 import XCTest
 import GRDB
 @testable import DirectGTD
@@ -128,7 +129,7 @@ final class ItemRepositoryTests: XCTestCase {
 
 // MARK: - Test Database Helper
 
-class TestDatabaseWrapper: DatabaseProvider {
+final class TestDatabaseWrapper: DatabaseProvider, @unchecked Sendable {
     private var testQueue: DatabaseQueue?
 
     init() {
@@ -147,7 +148,7 @@ class TestDatabaseWrapper: DatabaseProvider {
         }
 
         try queue.write { db in
-            // Create items table
+            // Create items table (v9 schema with CloudKit sync fields)
             try db.execute(sql: """
                 CREATE TABLE items (
                     id TEXT PRIMARY KEY,
@@ -161,31 +162,50 @@ class TestDatabaseWrapper: DatabaseProvider {
                     due_date INTEGER,
                     earliest_start_time INTEGER,
                     notes TEXT,
-                    FOREIGN KEY (parent_id) REFERENCES items(id) ON DELETE CASCADE
+                    ck_record_name TEXT,
+                    ck_change_tag TEXT,
+                    ck_system_fields BLOB,
+                    needs_push INTEGER DEFAULT 1,
+                    deleted_at INTEGER,
+                    FOREIGN KEY (parent_id) REFERENCES items(id) ON DELETE NO ACTION
                 )
             """)
 
-            // Create tags table
+            // Create tags table (v9 schema with CloudKit sync fields)
             try db.execute(sql: """
                 CREATE TABLE tags (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL UNIQUE,
-                    color TEXT
+                    color TEXT,
+                    created_at INTEGER,
+                    modified_at INTEGER,
+                    ck_record_name TEXT,
+                    ck_change_tag TEXT,
+                    ck_system_fields BLOB,
+                    needs_push INTEGER DEFAULT 1,
+                    deleted_at INTEGER
                 )
             """)
 
-            // Create item_tags junction table
+            // Create item_tags junction table (v9 schema with CloudKit sync fields)
             try db.execute(sql: """
                 CREATE TABLE item_tags (
                     item_id TEXT NOT NULL,
                     tag_id TEXT NOT NULL,
+                    created_at INTEGER,
+                    modified_at INTEGER,
+                    ck_record_name TEXT,
+                    ck_change_tag TEXT,
+                    ck_system_fields BLOB,
+                    needs_push INTEGER DEFAULT 1,
+                    deleted_at INTEGER,
                     PRIMARY KEY (item_id, tag_id),
-                    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
-                    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+                    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE NO ACTION,
+                    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE NO ACTION
                 )
             """)
 
-            // Create time_entries table
+            // Create time_entries table (v9 schema with CloudKit sync fields)
             try db.execute(sql: """
                 CREATE TABLE time_entries (
                     id TEXT PRIMARY KEY,
@@ -193,11 +213,17 @@ class TestDatabaseWrapper: DatabaseProvider {
                     started_at INTEGER NOT NULL,
                     ended_at INTEGER,
                     duration INTEGER,
-                    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+                    modified_at INTEGER,
+                    ck_record_name TEXT,
+                    ck_change_tag TEXT,
+                    ck_system_fields BLOB,
+                    needs_push INTEGER DEFAULT 1,
+                    deleted_at INTEGER,
+                    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE NO ACTION
                 )
             """)
 
-            // Create saved_searches table
+            // Create saved_searches table (v9 schema with CloudKit sync fields)
             try db.execute(sql: """
                 CREATE TABLE saved_searches (
                     id TEXT PRIMARY KEY,
@@ -205,7 +231,28 @@ class TestDatabaseWrapper: DatabaseProvider {
                     sql TEXT NOT NULL,
                     sort_order INTEGER DEFAULT 0,
                     created_at INTEGER NOT NULL,
-                    modified_at INTEGER NOT NULL
+                    modified_at INTEGER NOT NULL,
+                    ck_record_name TEXT,
+                    ck_change_tag TEXT,
+                    ck_system_fields BLOB,
+                    needs_push INTEGER DEFAULT 1,
+                    deleted_at INTEGER
+                )
+            """)
+
+            // Create sync_metadata table for change tokens
+            try db.execute(sql: """
+                CREATE TABLE sync_metadata (
+                    key TEXT PRIMARY KEY,
+                    value BLOB
+                )
+            """)
+
+            // Create app_settings table
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
                 )
             """)
 
@@ -215,6 +262,10 @@ class TestDatabaseWrapper: DatabaseProvider {
             try db.execute(sql: "CREATE INDEX idx_item_tags_tag ON item_tags(tag_id)")
             try db.execute(sql: "CREATE INDEX idx_time_entries_item_id ON time_entries(item_id)")
             try db.execute(sql: "CREATE INDEX idx_time_entries_started_at ON time_entries(started_at)")
+            try db.execute(sql: "CREATE INDEX idx_items_ck_record_name ON items(ck_record_name)")
+            try db.execute(sql: "CREATE INDEX idx_items_needs_push ON items(needs_push)")
+            try db.execute(sql: "CREATE INDEX idx_tags_ck_record_name ON tags(ck_record_name)")
+            try db.execute(sql: "CREATE INDEX idx_tags_needs_push ON tags(needs_push)")
         }
     }
 

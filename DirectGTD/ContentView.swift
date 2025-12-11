@@ -1,3 +1,4 @@
+import DirectGTDCore
 //
 //  ContentView.swift
 //  DirectGTD
@@ -10,6 +11,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var settings = UserSettings()
     @StateObject private var store: ItemStore
+    @ObservedObject var syncEngine: SyncEngine
     @State private var showingAddItem = false
     @State private var newItemName = ""
     @State private var showingSettings = false
@@ -19,7 +21,8 @@ struct ContentView: View {
     @State private var rightPaneView: RightPaneView
     @Environment(\.undoManager) var undoManager
 
-    init() {
+    init(syncEngine: SyncEngine) {
+        self.syncEngine = syncEngine
         let settings = UserSettings()
         _settings = StateObject(wrappedValue: settings)
         _store = StateObject(wrappedValue: ItemStore(settings: settings))
@@ -89,12 +92,9 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .padding()
 
-                Button(action: { store.loadItems() }) {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.plain)
-                .padding()
-                .help("Refresh")
+                SyncMenuButton(syncEngine: syncEngine)
+                    .buttonStyle(.plain)
+                    .padding()
 
                 Button(action: { undoManager?.undo() }) {
                     Image(systemName: "arrow.uturn.backward")
@@ -145,6 +145,12 @@ struct ContentView: View {
                 }
             }
         }
+        .overlay {
+            // Show initial sync progress overlay during first-time sync
+            if !syncEngine.isInitialSyncComplete {
+                InitialSyncProgressView(syncEngine: syncEngine)
+            }
+        }
         .alert("New Item", isPresented: $showingAddItem) {
             TextField("Enter name", text: $newItemName)
             Button("Cancel", role: .cancel) {
@@ -155,7 +161,7 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsView(settings: settings, store: store)
+            SettingsView(settings: settings, store: store, syncEngine: syncEngine)
         }
         .sheet(isPresented: $showingSQLSearch) {
             SQLSearchView(store: store)
@@ -226,5 +232,5 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    ContentView(syncEngine: SyncEngine())
 }

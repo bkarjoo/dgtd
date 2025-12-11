@@ -1,3 +1,4 @@
+import DirectGTDCore
 import XCTest
 @testable import DirectGTD
 import GRDB
@@ -229,7 +230,8 @@ final class BackupServiceTests: XCTestCase {
 
         // Last backup date should be unchanged
         let lastBackup = testDefaults.object(forKey: "lastDailyBackupDate") as? Date
-        XCTAssertEqual(lastBackup?.timeIntervalSince1970, oneHourAgo.timeIntervalSince1970, accuracy: 1.0)
+        XCTAssertNotNil(lastBackup)
+        XCTAssertEqual(lastBackup!.timeIntervalSince1970, oneHourAgo.timeIntervalSince1970, accuracy: 1.0)
     }
 
     func testCheckAndBackupIfNeededPerformsBackupAfter24Hours() throws {

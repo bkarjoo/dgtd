@@ -1,0 +1,1290 @@
+import DirectGTDCore
+import Foundation
+import CloudKit
+import GRDB
+import Combine
+
+/// Orchestrates push/pull sync operations with CloudKit.
+/// Handles dirty tracking, batch uploads, change token management, conflict resolution,
+/// and automatic retry with exponential backoff.
+class SyncEngine: ObservableObject {
+    private let cloudKitManager: CloudKitManager
+    private let database: DatabaseProvider
+    private let metadataStore: SyncMetadataStore
+
+    /// Sync status for UI
+    enum SyncStatus: Equatable {
+        case disabled          // Sync not available (no iCloud account)
+        case idle              // Ready to sync
+        case syncing           // Sync in progress
+        case initialSync(progress: Double, message: String)  // First-time sync with progress
+        case error(String)     // Last sync failed
+
+        static func == (lhs: SyncStatus, rhs: SyncStatus) -> Bool {
+            switch (lhs, rhs) {
+            case (.disabled, .disabled), (.idle, .idle), (.syncing, .syncing):
+                return true
+            case (.initialSync(let p1, let m1), .initialSync(let p2, let m2)):
+                return p1 == p2 && m1 == m2
+            case (.error(let a), .error(let b)):
+                return a == b
+            default:
+                return false
+            }
+        }
+    }
+
+    @Published private(set) var status: SyncStatus = .idle
+    @Published private(set) var lastSyncDate: Date?
+    @Published private(set) var iCloudAccountName: String?
+    @Published private(set) var isInitialSyncComplete: Bool = true
+    @Published var isSyncEnabled: Bool = true {
+        didSet {
+            if oldValue != isSyncEnabled {
+                Task {
+                    await handleSyncEnabledChange()
+                }
+            }
+        }
+    }
+
+    // Retry configuration
+    private let maxRetryAttempts = 3
+    private let baseRetryDelay: TimeInterval = 2.0  // seconds
+    private var currentRetryAttempt = 0
+    private var retryTask: Task<Void, Never>?
+
+    // Debounce sync requests
+    private var pendingSyncTask: Task<Void, Never>?
+    private let syncDebounceInterval: TimeInterval = 1.0
+
+    // Account monitoring
+    private var accountChangeObserver: NSObjectProtocol?
+
+    // Tombstone cleanup
+    private let tombstoneRetentionDays = 30
+
+    // Periodic sync timer (fallback when push notifications don't work)
+    private var periodicSyncTimer: Timer?
+    private let periodicSyncInterval: TimeInterval = 5 * 60  // 5 minutes
+
+    init(cloudKitManager: CloudKitManager = .shared,
+         database: DatabaseProvider = Database.shared) {
+        self.cloudKitManager = cloudKitManager
+        self.database = database
+
+        if let queue = database.getQueue() {
+            self.metadataStore = SyncMetadataStore(dbQueue: queue)
+            // Load last sync date
+            if let timestamp = try? metadataStore.getLastSyncTimestamp() {
+                lastSyncDate = Date(timeIntervalSince1970: TimeInterval(timestamp))
+            }
+            // Load initial sync status
+            isInitialSyncComplete = (try? metadataStore.isInitialSyncComplete()) ?? false
+            // Load sync enabled preference
+            isSyncEnabled = (try? metadataStore.isSyncEnabled()) ?? true
+        } else {
+            fatalError("SyncEngine requires initialized database")
+        }
+
+        setupAccountChangeObserver()
+    }
+
+    deinit {
+        if let observer = accountChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        periodicSyncTimer?.invalidate()
+    }
+
+    // MARK: - Public API
+
+    /// Start sync engine - initialize CloudKit and register for notifications
+    func start() async {
+        guard isSyncEnabled else {
+            await MainActor.run { status = .disabled }
+            NSLog("SyncEngine: Sync disabled by user")
+            return
+        }
+
+        do {
+            try await cloudKitManager.initialize()
+            try await cloudKitManager.registerForSubscriptions()
+
+            // Fetch account info
+            await fetchAccountInfo()
+
+            await MainActor.run { status = .idle }
+
+            // Check if this is the first sync
+            let needsInitialSync = !(try metadataStore.isInitialSyncComplete())
+            if needsInitialSync {
+                await MainActor.run { isInitialSyncComplete = false }
+                try await performInitialSync()
+            } else {
+                // Perform regular sync (which includes tombstone cleanup)
+                try await sync()
+            }
+
+            // Start periodic sync timer as fallback for unreliable push notifications
+            startPeriodicSyncTimer()
+        } catch let error as CloudKitError {
+            await MainActor.run {
+                if case .accountNotAvailable = error {
+                    status = .disabled
+                } else {
+                    status = .error(error.localizedDescription)
+                }
+            }
+            NSLog("SyncEngine: Failed to start - \(error)")
+        } catch {
+            await MainActor.run { status = .error(error.localizedDescription) }
+            NSLog("SyncEngine: Failed to start - \(error)")
+        }
+    }
+
+    /// Stop sync engine
+    func stop() async {
+        retryTask?.cancel()
+        pendingSyncTask?.cancel()
+        stopPeriodicSyncTimer()
+
+        do {
+            try await cloudKitManager.unregisterSubscriptions()
+        } catch {
+            NSLog("SyncEngine: Error unregistering subscriptions - \(error)")
+        }
+
+        await MainActor.run { status = .disabled }
+    }
+
+    /// Request a sync (debounced to avoid rapid-fire syncs)
+    func requestSync() {
+        pendingSyncTask?.cancel()
+        pendingSyncTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(syncDebounceInterval * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+
+            do {
+                try await sync()
+            } catch {
+                NSLog("SyncEngine: Requested sync failed - \(error)")
+            }
+        }
+    }
+
+    /// Handle remote notification (called from AppDelegate)
+    /// Handle a remote notification from CloudKit.
+    /// Returns true if changes were fetched, false otherwise.
+    @discardableResult
+    func handleRemoteNotification(userInfo: [AnyHashable: Any]) async -> Bool {
+        NSLog("SyncEngine: Received remote notification")
+
+        // Parse the notification to check if it's a CloudKit notification
+        let notification = CKNotification(fromRemoteNotificationDictionary: userInfo)
+
+        guard notification?.subscriptionID == CloudKitManager.subscriptionID else {
+            NSLog("SyncEngine: Notification not for our subscription")
+            return false
+        }
+
+        // Trigger a pull to get the latest changes
+        do {
+            let changeCount = try await pullRemoteChanges()
+            NSLog("SyncEngine: Pulled \(changeCount) changes from notification")
+
+            // Run tombstone cleanup after successful pull
+            try await cleanupTombstones()
+
+            return changeCount > 0
+        } catch {
+            NSLog("SyncEngine: Failed to pull after notification - \(error)")
+            return false
+        }
+    }
+
+    // MARK: - Full Sync
+
+    /// Perform a full sync: push local changes, then pull remote changes
+    func sync() async throws {
+        guard status != .disabled else {
+            NSLog("SyncEngine: Sync skipped - disabled")
+            return
+        }
+
+        await MainActor.run { status = .syncing }
+        currentRetryAttempt = 0
+
+        do {
+            // Ensure CloudKit is ready
+            try await cloudKitManager.initialize()
+
+            // Push local changes first
+            try await pushLocalChanges()
+
+            // Then pull remote changes
+            try await pullRemoteChanges()
+
+            try metadataStore.updateLastSyncTimestamp()
+
+            await MainActor.run {
+                status = .idle
+                lastSyncDate = Date()
+            }
+            NSLog("SyncEngine: Sync completed successfully")
+
+            // Run tombstone cleanup after successful sync
+            try await cleanupTombstones()
+        } catch {
+            await handleSyncError(error)
+            throw error
+        }
+    }
+
+    // MARK: - Error Handling & Retry
+
+    private func handleSyncError(_ error: Error) async {
+        // Check if this is a retryable error
+        if isRetryableError(error) && currentRetryAttempt < maxRetryAttempts {
+            currentRetryAttempt += 1
+            let delay = calculateRetryDelay()
+
+            NSLog("SyncEngine: Retryable error, attempt \(currentRetryAttempt)/\(maxRetryAttempts), retrying in \(delay)s")
+
+            await MainActor.run {
+                status = .error("Retrying... (\(currentRetryAttempt)/\(maxRetryAttempts))")
+            }
+
+            retryTask = Task {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+
+                do {
+                    try await sync()
+                } catch {
+                    NSLog("SyncEngine: Retry attempt \(currentRetryAttempt) failed")
+                }
+            }
+        } else {
+            await MainActor.run {
+                status = .error(error.localizedDescription)
+            }
+            NSLog("SyncEngine: Sync failed (non-retryable or max attempts reached) - \(error)")
+        }
+    }
+
+    private func isRetryableError(_ error: Error) -> Bool {
+        if let ckError = error as? CKError {
+            switch ckError.code {
+            case .networkUnavailable, .networkFailure, .serviceUnavailable,
+                 .requestRateLimited, .zoneBusy, .operationCancelled:
+                return true
+            default:
+                return false
+            }
+        }
+        // Network errors are retryable
+        if (error as NSError).domain == NSURLErrorDomain {
+            return true
+        }
+        return false
+    }
+
+    private func calculateRetryDelay() -> TimeInterval {
+        // Exponential backoff: 2s, 4s, 8s, ...
+        let delay = baseRetryDelay * pow(2.0, Double(currentRetryAttempt - 1))
+        // Add jitter (±25%)
+        let jitter = delay * Double.random(in: -0.25...0.25)
+        return delay + jitter
+    }
+
+    // MARK: - Initial Sync
+
+    /// Perform initial sync with progress reporting
+    private func performInitialSync() async throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        NSLog("SyncEngine: Starting initial sync")
+
+        // Count total records to sync for progress calculation
+        let totalItems = try await dbQueue.read { db in try Item.fetchCount(db) }
+        let totalTags = try await dbQueue.read { db in try Tag.fetchCount(db) }
+        let totalItemTags = try await dbQueue.read { db in try ItemTag.fetchCount(db) }
+        let totalTimeEntries = try await dbQueue.read { db in try TimeEntry.fetchCount(db) }
+        let totalSavedSearches = try await dbQueue.read { db in try SavedSearch.fetchCount(db) }
+        let totalRecords = totalItems + totalTags + totalItemTags + totalTimeEntries + totalSavedSearches
+
+        NSLog("SyncEngine: Initial sync - \(totalRecords) total records to sync")
+
+        // Phase 1: Push local changes (40% of progress)
+        await MainActor.run {
+            status = .initialSync(progress: 0.0, message: "Preparing to sync \(totalRecords) records...")
+        }
+
+        await MainActor.run {
+            status = .initialSync(progress: 0.1, message: "Uploading items...")
+        }
+        try await pushLocalChanges()
+
+        await MainActor.run {
+            status = .initialSync(progress: 0.4, message: "Uploading complete")
+        }
+
+        // Phase 2: Pull remote changes (40% of progress)
+        await MainActor.run {
+            status = .initialSync(progress: 0.5, message: "Downloading remote changes...")
+        }
+        try await pullRemoteChanges()
+
+        await MainActor.run {
+            status = .initialSync(progress: 0.8, message: "Download complete")
+        }
+
+        // Phase 3: Finalize (20% of progress)
+        await MainActor.run {
+            status = .initialSync(progress: 0.9, message: "Finalizing...")
+        }
+
+        try metadataStore.updateLastSyncTimestamp()
+        try metadataStore.setInitialSyncComplete(true)
+
+        // Run tombstone cleanup after successful initial sync
+        try await cleanupTombstones()
+
+        await MainActor.run {
+            status = .initialSync(progress: 1.0, message: "Sync complete!")
+            isInitialSyncComplete = true
+            lastSyncDate = Date()
+        }
+
+        // Brief pause to show completion
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        await MainActor.run {
+            status = .idle
+        }
+
+        NSLog("SyncEngine: Initial sync completed successfully")
+    }
+
+    // MARK: - Account Management
+
+    /// Setup observer for iCloud account changes
+    private func setupAccountChangeObserver() {
+        accountChangeObserver = NotificationCenter.default.addObserver(
+            forName: .CKAccountChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            NSLog("SyncEngine: iCloud account changed notification received")
+            Task {
+                await self?.handleAccountChange()
+            }
+        }
+    }
+
+    /// Handle iCloud account change (sign in, sign out, switch)
+    private func handleAccountChange() async {
+        NSLog("SyncEngine: Handling account change")
+
+        // Re-check account status
+        do {
+            let accountStatus = try await cloudKitManager.checkAccountStatus()
+
+            await MainActor.run {
+                if accountStatus == .available {
+                    // Account is available - restart sync
+                    NSLog("SyncEngine: Account available, restarting sync")
+                } else {
+                    // Account not available - disable sync
+                    NSLog("SyncEngine: Account not available, disabling sync")
+                    status = .disabled
+                    iCloudAccountName = nil
+                }
+            }
+
+            if accountStatus == .available {
+                await fetchAccountInfo()
+                await start()
+            }
+        } catch {
+            NSLog("SyncEngine: Error checking account status after change: \(error)")
+            await MainActor.run {
+                status = .error("Account error: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Fetch iCloud account display name
+    private func fetchAccountInfo() async {
+        do {
+            let userRecordID = try await cloudKitManager.container.userRecordID()
+            // Try to discover user identity
+            let identity = try? await cloudKitManager.container.userIdentity(forUserRecordID: userRecordID)
+            let name = identity?.nameComponents?.formatted() ?? userRecordID.recordName
+
+            await MainActor.run {
+                iCloudAccountName = name
+            }
+            NSLog("SyncEngine: Fetched account info: \(name)")
+        } catch {
+            NSLog("SyncEngine: Could not fetch account info: \(error)")
+        }
+    }
+
+    /// Handle sync enabled/disabled toggle
+    private func handleSyncEnabledChange() async {
+        do {
+            try metadataStore.setSyncEnabled(isSyncEnabled)
+
+            if isSyncEnabled {
+                NSLog("SyncEngine: Sync enabled by user, starting")
+                await start()
+            } else {
+                NSLog("SyncEngine: Sync disabled by user, stopping")
+                await stop()
+            }
+        } catch {
+            NSLog("SyncEngine: Error saving sync enabled state: \(error)")
+        }
+    }
+
+    // MARK: - Periodic Sync Timer
+
+    /// Start periodic sync timer as fallback for unreliable push notifications
+    private func startPeriodicSyncTimer() {
+        // Must run on main thread for Timer
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            // Invalidate any existing timer
+            self.periodicSyncTimer?.invalidate()
+
+            // Create new timer
+            self.periodicSyncTimer = Timer.scheduledTimer(
+                withTimeInterval: self.periodicSyncInterval,
+                repeats: true
+            ) { [weak self] _ in
+                NSLog("SyncEngine: Periodic sync timer fired")
+                self?.requestSync()
+            }
+
+            NSLog("SyncEngine: Periodic sync timer started (interval: \(self.periodicSyncInterval)s)")
+        }
+    }
+
+    /// Stop periodic sync timer
+    private func stopPeriodicSyncTimer() {
+        DispatchQueue.main.async { [weak self] in
+            self?.periodicSyncTimer?.invalidate()
+            self?.periodicSyncTimer = nil
+            NSLog("SyncEngine: Periodic sync timer stopped")
+        }
+    }
+
+    // MARK: - Tombstone Cleanup
+
+    /// Purge tombstones older than retention period that have been synced
+    func cleanupTombstones() async throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        let cutoffTimestamp = Int(Date().timeIntervalSince1970) - (tombstoneRetentionDays * 24 * 60 * 60)
+        NSLog("SyncEngine: Cleaning up tombstones older than \(tombstoneRetentionDays) days (cutoff: \(cutoffTimestamp))")
+
+        try await dbQueue.write { db in
+            // Only purge tombstones that:
+            // 1. Have been soft-deleted (deleted_at IS NOT NULL)
+            // 2. Are older than retention period
+            // 3. Have been synced to CloudKit (needs_push = 0)
+
+            // Purge item_tags first (junction table)
+            try db.execute(
+                sql: """
+                    DELETE FROM item_tags
+                    WHERE deleted_at IS NOT NULL
+                    AND deleted_at < ?
+                    AND (needs_push = 0 OR needs_push IS NULL)
+                    """,
+                arguments: [cutoffTimestamp]
+            )
+            NSLog("SyncEngine: Purged \(db.changesCount) item_tags tombstones")
+
+            // Purge time_entries
+            try db.execute(
+                sql: """
+                    DELETE FROM time_entries
+                    WHERE deleted_at IS NOT NULL
+                    AND deleted_at < ?
+                    AND (needs_push = 0 OR needs_push IS NULL)
+                    """,
+                arguments: [cutoffTimestamp]
+            )
+            NSLog("SyncEngine: Purged \(db.changesCount) time_entries tombstones")
+
+            // Purge tags (only if no item_tags reference them - even tombstoned ones)
+            try db.execute(
+                sql: """
+                    DELETE FROM tags
+                    WHERE deleted_at IS NOT NULL
+                    AND deleted_at < ?
+                    AND (needs_push = 0 OR needs_push IS NULL)
+                    AND id NOT IN (SELECT tag_id FROM item_tags)
+                    """,
+                arguments: [cutoffTimestamp]
+            )
+            NSLog("SyncEngine: Purged \(db.changesCount) tags tombstones")
+
+            // Purge saved_searches
+            try db.execute(
+                sql: """
+                    DELETE FROM saved_searches
+                    WHERE deleted_at IS NOT NULL
+                    AND deleted_at < ?
+                    AND (needs_push = 0 OR needs_push IS NULL)
+                    """,
+                arguments: [cutoffTimestamp]
+            )
+            NSLog("SyncEngine: Purged \(db.changesCount) saved_searches tombstones")
+
+            // Purge items (only leaf nodes first - items with no children)
+            // We need to do this in multiple passes until no more can be deleted
+            var totalItemsDeleted = 0
+            var passDeleted: Int
+            repeat {
+                try db.execute(
+                    sql: """
+                        DELETE FROM items
+                        WHERE deleted_at IS NOT NULL
+                        AND deleted_at < ?
+                        AND (needs_push = 0 OR needs_push IS NULL)
+                        AND id NOT IN (SELECT parent_id FROM items WHERE parent_id IS NOT NULL)
+                        AND id NOT IN (SELECT item_id FROM item_tags)
+                        AND id NOT IN (SELECT item_id FROM time_entries)
+                        """,
+                    arguments: [cutoffTimestamp]
+                )
+                passDeleted = db.changesCount
+                totalItemsDeleted += passDeleted
+            } while passDeleted > 0
+
+            NSLog("SyncEngine: Purged \(totalItemsDeleted) items tombstones")
+        }
+    }
+
+    /// Reset sync state (for account switch or troubleshooting)
+    func resetSyncState() async throws {
+        NSLog("SyncEngine: Resetting sync state")
+
+        // Stop any ongoing sync
+        await stop()
+
+        // Clear all sync metadata
+        try metadataStore.clearAll()
+
+        // Mark all records as needing push
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        try await dbQueue.write { db in
+            try db.execute(sql: "UPDATE items SET needs_push = 1, ck_change_tag = NULL, ck_system_fields = NULL")
+            try db.execute(sql: "UPDATE tags SET needs_push = 1, ck_change_tag = NULL, ck_system_fields = NULL")
+            try db.execute(sql: "UPDATE item_tags SET needs_push = 1, ck_change_tag = NULL, ck_system_fields = NULL")
+            try db.execute(sql: "UPDATE time_entries SET needs_push = 1, ck_change_tag = NULL, ck_system_fields = NULL")
+            try db.execute(sql: "UPDATE saved_searches SET needs_push = 1, ck_change_tag = NULL, ck_system_fields = NULL")
+        }
+
+        await MainActor.run {
+            isInitialSyncComplete = false
+            lastSyncDate = nil
+            status = .idle
+        }
+
+        NSLog("SyncEngine: Sync state reset complete")
+    }
+
+    // MARK: - Push
+
+    /// Push all dirty records to CloudKit
+    func pushLocalChanges() async throws {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        // Get all dirty records
+        let dirtyItems = try getDirtyItems(dbQueue: dbQueue)
+        let dirtyTags = try getDirtyTags(dbQueue: dbQueue)
+        let dirtyItemTags = try getDirtyItemTags(dbQueue: dbQueue)
+        let dirtyTimeEntries = try getDirtyTimeEntries(dbQueue: dbQueue)
+        let dirtySavedSearches = try getDirtySavedSearches(dbQueue: dbQueue)
+
+        NSLog("SyncEngine: Pushing \(dirtyItems.count) items, \(dirtyTags.count) tags, \(dirtyItemTags.count) itemTags, \(dirtyTimeEntries.count) timeEntries, \(dirtySavedSearches.count) savedSearches")
+
+        // Separate records to save vs delete
+        var recordsToSave: [CKRecord] = []
+        var recordIDsToDelete: [CKRecord.ID] = []
+
+        // Process items
+        for item in dirtyItems {
+            if item.deletedAt != nil {
+                // This is a tombstone - delete from CloudKit
+                if let recordName = item.ckRecordName {
+                    recordIDsToDelete.append(cloudKitManager.recordID(for: recordName))
+                }
+            } else {
+                recordsToSave.append(CKRecordConverters.record(from: item, manager: cloudKitManager))
+            }
+        }
+
+        // Process tags
+        for tag in dirtyTags {
+            if tag.deletedAt != nil {
+                if let recordName = tag.ckRecordName {
+                    recordIDsToDelete.append(cloudKitManager.recordID(for: recordName))
+                }
+            } else {
+                recordsToSave.append(CKRecordConverters.record(from: tag, manager: cloudKitManager))
+            }
+        }
+
+        // Process itemTags
+        for itemTag in dirtyItemTags {
+            if itemTag.deletedAt != nil {
+                if let recordName = itemTag.ckRecordName {
+                    recordIDsToDelete.append(cloudKitManager.recordID(for: recordName))
+                }
+            } else {
+                recordsToSave.append(CKRecordConverters.record(from: itemTag, manager: cloudKitManager))
+            }
+        }
+
+        // Process timeEntries
+        for timeEntry in dirtyTimeEntries {
+            if timeEntry.deletedAt != nil {
+                if let recordName = timeEntry.ckRecordName {
+                    recordIDsToDelete.append(cloudKitManager.recordID(for: recordName))
+                }
+            } else {
+                recordsToSave.append(CKRecordConverters.record(from: timeEntry, manager: cloudKitManager))
+            }
+        }
+
+        // Process savedSearches
+        for savedSearch in dirtySavedSearches {
+            if savedSearch.deletedAt != nil {
+                if let recordName = savedSearch.ckRecordName {
+                    recordIDsToDelete.append(cloudKitManager.recordID(for: recordName))
+                }
+            } else {
+                recordsToSave.append(CKRecordConverters.record(from: savedSearch, manager: cloudKitManager))
+            }
+        }
+
+        // Perform batch operation
+        if !recordsToSave.isEmpty || !recordIDsToDelete.isEmpty {
+            try await performBatchOperation(
+                recordsToSave: recordsToSave,
+                recordIDsToDelete: recordIDsToDelete,
+                dbQueue: dbQueue
+            )
+        }
+    }
+
+    /// Result type for batch modify operation
+    private struct BatchModifyResult {
+        var savedRecords: [CKRecord] = []
+        var deletedRecordIDs: [CKRecord.ID] = []
+        var conflictErrors: [(CKRecord.ID, CKError)] = []
+    }
+
+    /// CloudKit batch size limit
+    private static let cloudKitBatchLimit = 400
+
+    /// Perform batch save/delete with conflict handling, waiting for completion
+    /// Automatically chunks records into batches of 400 to respect CloudKit limits
+    private func performBatchOperation(recordsToSave: [CKRecord],
+                                       recordIDsToDelete: [CKRecord.ID],
+                                       dbQueue: DatabaseQueue) async throws {
+        // Chunk records into batches of 400 (CloudKit limit)
+        let saveChunks = recordsToSave.chunked(into: Self.cloudKitBatchLimit)
+        let deleteChunks = recordIDsToDelete.chunked(into: Self.cloudKitBatchLimit)
+
+        // Calculate total batches for logging
+        let totalBatches = max(saveChunks.count, deleteChunks.count)
+        NSLog("SyncEngine: Processing \(recordsToSave.count) saves and \(recordIDsToDelete.count) deletes in \(totalBatches) batch(es)")
+
+        var totalSaved = 0
+        var totalDeleted = 0
+        var totalConflicts = 0
+
+        // Process save batches
+        for (index, saveChunk) in saveChunks.enumerated() {
+            NSLog("SyncEngine: Processing save batch \(index + 1)/\(saveChunks.count) (\(saveChunk.count) records)")
+            let result = try await performSingleBatchOperation(
+                recordsToSave: saveChunk,
+                recordIDsToDelete: [],
+                dbQueue: dbQueue
+            )
+            totalSaved += result.savedRecords.count
+            totalConflicts += result.conflictErrors.count
+
+            // Process results immediately after each batch
+            try updateLocalRecordsAfterPush(savedRecords: result.savedRecords, dbQueue: dbQueue)
+            if !result.conflictErrors.isEmpty {
+                try handleConflicts(result.conflictErrors, dbQueue: dbQueue)
+            }
+        }
+
+        // Process delete batches
+        for (index, deleteChunk) in deleteChunks.enumerated() {
+            NSLog("SyncEngine: Processing delete batch \(index + 1)/\(deleteChunks.count) (\(deleteChunk.count) records)")
+            let result = try await performSingleBatchOperation(
+                recordsToSave: [],
+                recordIDsToDelete: deleteChunk,
+                dbQueue: dbQueue
+            )
+            totalDeleted += result.deletedRecordIDs.count
+
+            // Process results immediately after each batch
+            try markDeletedRecordsAsSynced(recordIDs: result.deletedRecordIDs, dbQueue: dbQueue)
+        }
+
+        NSLog("SyncEngine: Push complete - saved: \(totalSaved), deleted: \(totalDeleted), conflicts: \(totalConflicts)")
+    }
+
+    /// Perform a single batch operation (up to 400 records)
+    private func performSingleBatchOperation(recordsToSave: [CKRecord],
+                                             recordIDsToDelete: [CKRecord.ID],
+                                             dbQueue: DatabaseQueue) async throws -> BatchModifyResult {
+        let operation = CKModifyRecordsOperation(recordsToSave: recordsToSave, recordIDsToDelete: recordIDsToDelete)
+        operation.savePolicy = .ifServerRecordUnchanged
+        operation.isAtomic = false  // Allow partial success
+
+        // Use continuation to wait for operation completion
+        let result: BatchModifyResult = try await withCheckedThrowingContinuation { continuation in
+            var batchResult = BatchModifyResult()
+
+            operation.perRecordSaveBlock = { recordID, result in
+                switch result {
+                case .success(let record):
+                    batchResult.savedRecords.append(record)
+                case .failure(let error):
+                    if let ckError = error as? CKError, ckError.code == .serverRecordChanged {
+                        batchResult.conflictErrors.append((recordID, ckError))
+                    } else {
+                        NSLog("SyncEngine: Failed to save record \(recordID.recordName): \(error)")
+                    }
+                }
+            }
+
+            operation.perRecordDeleteBlock = { recordID, result in
+                switch result {
+                case .success:
+                    batchResult.deletedRecordIDs.append(recordID)
+                case .failure(let error):
+                    // Ignore "not found" errors for deletes
+                    if let ckError = error as? CKError, ckError.code == .unknownItem {
+                        batchResult.deletedRecordIDs.append(recordID)  // Consider it deleted
+                    } else {
+                        NSLog("SyncEngine: Failed to delete record \(recordID.recordName): \(error)")
+                    }
+                }
+            }
+
+            operation.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success:
+                    continuation.resume(returning: batchResult)
+                case .failure(let error):
+                    // Check if it's a partial failure - we still want to process successful records
+                    if let ckError = error as? CKError, ckError.code == .partialFailure {
+                        // Partial failure is expected when some records fail - continue with what succeeded
+                        continuation.resume(returning: batchResult)
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+
+            self.cloudKitManager.privateDatabase.add(operation)
+        }
+
+        return result
+    }
+
+    // MARK: - Pull
+
+    /// Result type for zone fetch operation
+    private struct ZoneFetchResult {
+        var changedRecords: [CKRecord] = []
+        var deletedRecordIDs: [(CKRecord.ID, CKRecord.RecordType)] = []
+        var newChangeToken: CKServerChangeToken?
+        var moreComing: Bool = false
+    }
+
+    /// Pull remote changes using stored change token, looping until moreComing is false
+    /// Pull remote changes from CloudKit.
+    /// Returns the total number of changes (changed + deleted records).
+    @discardableResult
+    func pullRemoteChanges() async throws -> Int {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        var currentToken: CKServerChangeToken? = nil
+        if let tokenData = try metadataStore.getZoneChangeToken() {
+            currentToken = try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self, from: tokenData)
+        }
+
+        var totalChanged = 0
+        var totalDeleted = 0
+
+        // Loop until server indicates we're caught up (moreComing == false)
+        repeat {
+            let result = try await fetchZoneChanges(changeToken: currentToken)
+
+            // Apply changes to local database
+            try applyRemoteChanges(changedRecords: result.changedRecords, deletedRecordIDs: result.deletedRecordIDs, dbQueue: dbQueue)
+
+            totalChanged += result.changedRecords.count
+            totalDeleted += result.deletedRecordIDs.count
+
+            // Save change token after each batch
+            if let newToken = result.newChangeToken {
+                let tokenData = try NSKeyedArchiver.archivedData(withRootObject: newToken, requiringSecureCoding: true)
+                try metadataStore.setZoneChangeToken(tokenData)
+                currentToken = newToken
+            }
+
+            // Continue if there are more changes
+            if !result.moreComing {
+                break
+            }
+
+            NSLog("SyncEngine: More changes coming, fetching next batch...")
+        } while true
+
+        NSLog("SyncEngine: Pull complete - changed: \(totalChanged), deleted: \(totalDeleted)")
+        return totalChanged + totalDeleted
+    }
+
+    /// Fetch a single batch of zone changes
+    private func fetchZoneChanges(changeToken: CKServerChangeToken?) async throws -> ZoneFetchResult {
+        let options = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
+        options.previousServerChangeToken = changeToken
+
+        let operation = CKFetchRecordZoneChangesOperation(
+            recordZoneIDs: [cloudKitManager.zoneID],
+            configurationsByRecordZoneID: [cloudKitManager.zoneID: options]
+        )
+
+        return try await withCheckedThrowingContinuation { continuation in
+            var fetchResult = ZoneFetchResult()
+            var operationError: Error?
+
+            operation.recordWasChangedBlock = { _, result in
+                switch result {
+                case .success(let record):
+                    fetchResult.changedRecords.append(record)
+                case .failure(let error):
+                    NSLog("SyncEngine: Error fetching record: \(error)")
+                }
+            }
+
+            operation.recordWithIDWasDeletedBlock = { recordID, recordType in
+                fetchResult.deletedRecordIDs.append((recordID, recordType))
+            }
+
+            operation.recordZoneChangeTokensUpdatedBlock = { _, token, _ in
+                fetchResult.newChangeToken = token
+            }
+
+            operation.recordZoneFetchResultBlock = { [zoneID = self.cloudKitManager.zoneID] fetchedZoneID, result in
+                guard fetchedZoneID == zoneID else { return }
+
+                switch result {
+                case .success(let (token, _, moreComing)):
+                    fetchResult.newChangeToken = token
+                    fetchResult.moreComing = moreComing
+                case .failure(let error):
+                    NSLog("SyncEngine: Zone fetch error: \(error)")
+                    operationError = error
+                }
+            }
+
+            operation.fetchRecordZoneChangesResultBlock = { result in
+                switch result {
+                case .success:
+                    continuation.resume(returning: fetchResult)
+                case .failure(let error):
+                    continuation.resume(throwing: operationError ?? error)
+                }
+            }
+
+            self.cloudKitManager.privateDatabase.add(operation)
+        }
+    }
+
+    /// Apply remote changes to local database
+    private func applyRemoteChanges(changedRecords: [CKRecord],
+                                    deletedRecordIDs: [(CKRecord.ID, CKRecord.RecordType)],
+                                    dbQueue: DatabaseQueue) throws {
+        try dbQueue.write { db in
+            // Apply changed records
+            for record in changedRecords {
+                switch record.recordType {
+                case CloudKitManager.RecordType.item:
+                    if let item = CKRecordConverters.item(from: record) {
+                        // Check for conflict with local changes
+                        if let existingItem = try Item.fetchOne(db, key: item.id),
+                           existingItem.needsPush == 1 {
+                            // Local has unsaved changes - use last-write-wins
+                            if let serverModified = record["modifiedAt"] as? Int,
+                               serverModified > existingItem.modifiedAt {
+                                // Server wins
+                                try item.save(db, onConflict: .replace)
+                            }
+                            // Otherwise local wins - don't overwrite
+                        } else {
+                            // No local conflict, apply server version
+                            try item.save(db, onConflict: .replace)
+                        }
+                    }
+
+                case CloudKitManager.RecordType.tag:
+                    if let tag = CKRecordConverters.tag(from: record) {
+                        if let existingTag = try Tag.fetchOne(db, key: tag.id),
+                           existingTag.needsPush == 1 {
+                            if let serverModified = record["modifiedAt"] as? Int,
+                               let localModified = existingTag.modifiedAt,
+                               serverModified > localModified {
+                                try tag.save(db, onConflict: .replace)
+                            }
+                        } else {
+                            try tag.save(db, onConflict: .replace)
+                        }
+                    }
+
+                case CloudKitManager.RecordType.itemTag:
+                    if let itemTag = CKRecordConverters.itemTag(from: record) {
+                        // ItemTag uses composite key
+                        let existing = try ItemTag
+                            .filter(Column("item_id") == itemTag.itemId && Column("tag_id") == itemTag.tagId)
+                            .fetchOne(db)
+                        if let existingItemTag = existing, existingItemTag.needsPush == 1 {
+                            if let serverModified = record["modifiedAt"] as? Int,
+                               let localModified = existingItemTag.modifiedAt,
+                               serverModified > localModified {
+                                try itemTag.save(db, onConflict: .replace)
+                            }
+                        } else {
+                            try itemTag.save(db, onConflict: .replace)
+                        }
+                    }
+
+                case CloudKitManager.RecordType.timeEntry:
+                    if let timeEntry = CKRecordConverters.timeEntry(from: record) {
+                        if let existingEntry = try TimeEntry.fetchOne(db, key: timeEntry.id),
+                           existingEntry.needsPush == 1 {
+                            if let serverModified = record["modifiedAt"] as? Int,
+                               let localModified = existingEntry.modifiedAt,
+                               serverModified > localModified {
+                                try timeEntry.save(db, onConflict: .replace)
+                            }
+                        } else {
+                            try timeEntry.save(db, onConflict: .replace)
+                        }
+                    }
+
+                case CloudKitManager.RecordType.savedSearch:
+                    if let savedSearch = CKRecordConverters.savedSearch(from: record) {
+                        if let existingSearch = try SavedSearch.fetchOne(db, key: savedSearch.id),
+                           existingSearch.needsPush == 1 {
+                            if let serverModified = record["modifiedAt"] as? Int,
+                               serverModified > existingSearch.modifiedAt {
+                                try savedSearch.save(db, onConflict: .replace)
+                            }
+                        } else {
+                            try savedSearch.save(db, onConflict: .replace)
+                        }
+                    }
+
+                default:
+                    NSLog("SyncEngine: Unknown record type: \(record.recordType)")
+                }
+            }
+
+            // Apply deletions
+            for (recordID, recordType) in deletedRecordIDs {
+                let now = Int(Date().timeIntervalSince1970)
+                let recordName = recordID.recordName
+
+                switch recordType {
+                case CloudKitManager.RecordType.item:
+                    // Soft-delete locally
+                    try db.execute(
+                        sql: "UPDATE items SET deleted_at = ?, needs_push = 0 WHERE ck_record_name = ?",
+                        arguments: [now, recordName]
+                    )
+
+                case CloudKitManager.RecordType.tag:
+                    try db.execute(
+                        sql: "UPDATE tags SET deleted_at = ?, needs_push = 0 WHERE ck_record_name = ?",
+                        arguments: [now, recordName]
+                    )
+
+                case CloudKitManager.RecordType.itemTag:
+                    try db.execute(
+                        sql: "UPDATE item_tags SET deleted_at = ?, needs_push = 0 WHERE ck_record_name = ?",
+                        arguments: [now, recordName]
+                    )
+
+                case CloudKitManager.RecordType.timeEntry:
+                    try db.execute(
+                        sql: "UPDATE time_entries SET deleted_at = ?, needs_push = 0 WHERE ck_record_name = ?",
+                        arguments: [now, recordName]
+                    )
+
+                case CloudKitManager.RecordType.savedSearch:
+                    try db.execute(
+                        sql: "UPDATE saved_searches SET deleted_at = ?, needs_push = 0 WHERE ck_record_name = ?",
+                        arguments: [now, recordName]
+                    )
+
+                default:
+                    break
+                }
+            }
+        }
+    }
+
+    // MARK: - Conflict Resolution
+
+    /// Handle conflicts using last-write-wins.
+    /// When local wins, updates ck_change_tag and ck_system_fields from server so next push can succeed.
+    private func handleConflicts(_ conflicts: [(CKRecord.ID, CKError)], dbQueue: DatabaseQueue) throws {
+        for (recordID, error) in conflicts {
+            guard let serverRecord = error.serverRecord else { continue }
+
+            let recordName = recordID.recordName
+            let serverChangeTag = serverRecord.recordChangeTag
+            // Encode server's system fields so we can use them for the retry push
+            let serverSystemFields = CKRecordConverters.encodeSystemFields(serverRecord)
+
+            try dbQueue.write { db in
+                let serverModifiedAt = serverRecord["modifiedAt"] as? Int ?? 0
+
+                switch serverRecord.recordType {
+                case CloudKitManager.RecordType.item:
+                    if let localItem = try Item.filter(Column("ck_record_name") == recordName).fetchOne(db) {
+                        if localItem.modifiedAt > serverModifiedAt {
+                            // Local wins - update change tag and system fields so next push succeeds
+                            try db.execute(
+                                sql: "UPDATE items SET ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                                arguments: [serverChangeTag, serverSystemFields, recordName]
+                            )
+                            NSLog("SyncEngine: Conflict - local item wins, updated system fields for retry")
+                        } else {
+                            // Server wins - apply server version
+                            if let item = CKRecordConverters.item(from: serverRecord) {
+                                try item.save(db, onConflict: .replace)
+                            }
+                            NSLog("SyncEngine: Conflict - server item wins")
+                        }
+                    }
+
+                case CloudKitManager.RecordType.tag:
+                    if let localTag = try Tag.filter(Column("ck_record_name") == recordName).fetchOne(db),
+                       let localModified = localTag.modifiedAt {
+                        if localModified > serverModifiedAt {
+                            // Local wins - update change tag and system fields so next push succeeds
+                            try db.execute(
+                                sql: "UPDATE tags SET ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                                arguments: [serverChangeTag, serverSystemFields, recordName]
+                            )
+                            NSLog("SyncEngine: Conflict - local tag wins, updated system fields for retry")
+                        } else {
+                            // Server wins
+                            if let tag = CKRecordConverters.tag(from: serverRecord) {
+                                try tag.save(db, onConflict: .replace)
+                            }
+                            NSLog("SyncEngine: Conflict - server tag wins")
+                        }
+                    }
+
+                case CloudKitManager.RecordType.itemTag:
+                    if let localItemTag = try ItemTag.filter(Column("ck_record_name") == recordName).fetchOne(db),
+                       let localModified = localItemTag.modifiedAt {
+                        if localModified > serverModifiedAt {
+                            // Local wins
+                            try db.execute(
+                                sql: "UPDATE item_tags SET ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                                arguments: [serverChangeTag, serverSystemFields, recordName]
+                            )
+                            NSLog("SyncEngine: Conflict - local itemTag wins, updated system fields for retry")
+                        } else {
+                            // Server wins
+                            if let itemTag = CKRecordConverters.itemTag(from: serverRecord) {
+                                try itemTag.save(db, onConflict: .replace)
+                            }
+                            NSLog("SyncEngine: Conflict - server itemTag wins")
+                        }
+                    }
+
+                case CloudKitManager.RecordType.timeEntry:
+                    if let localTimeEntry = try TimeEntry.filter(Column("ck_record_name") == recordName).fetchOne(db),
+                       let localModified = localTimeEntry.modifiedAt {
+                        if localModified > serverModifiedAt {
+                            // Local wins
+                            try db.execute(
+                                sql: "UPDATE time_entries SET ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                                arguments: [serverChangeTag, serverSystemFields, recordName]
+                            )
+                            NSLog("SyncEngine: Conflict - local timeEntry wins, updated system fields for retry")
+                        } else {
+                            // Server wins
+                            if let timeEntry = CKRecordConverters.timeEntry(from: serverRecord) {
+                                try timeEntry.save(db, onConflict: .replace)
+                            }
+                            NSLog("SyncEngine: Conflict - server timeEntry wins")
+                        }
+                    }
+
+                case CloudKitManager.RecordType.savedSearch:
+                    if let localSearch = try SavedSearch.filter(Column("ck_record_name") == recordName).fetchOne(db) {
+                        if localSearch.modifiedAt > serverModifiedAt {
+                            // Local wins
+                            try db.execute(
+                                sql: "UPDATE saved_searches SET ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                                arguments: [serverChangeTag, serverSystemFields, recordName]
+                            )
+                            NSLog("SyncEngine: Conflict - local savedSearch wins, updated system fields for retry")
+                        } else {
+                            // Server wins
+                            if let savedSearch = CKRecordConverters.savedSearch(from: serverRecord) {
+                                try savedSearch.save(db, onConflict: .replace)
+                            }
+                            NSLog("SyncEngine: Conflict - server savedSearch wins")
+                        }
+                    }
+
+                default:
+                    NSLog("SyncEngine: Unhandled conflict for record type: \(serverRecord.recordType)")
+                }
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func getDirtyItems(dbQueue: DatabaseQueue) throws -> [Item] {
+        try dbQueue.read { db in
+            try Item.filter(Column("needs_push") == 1).fetchAll(db)
+        }
+    }
+
+    private func getDirtyTags(dbQueue: DatabaseQueue) throws -> [Tag] {
+        try dbQueue.read { db in
+            try Tag.filter(Column("needs_push") == 1).fetchAll(db)
+        }
+    }
+
+    private func getDirtyItemTags(dbQueue: DatabaseQueue) throws -> [ItemTag] {
+        try dbQueue.read { db in
+            try ItemTag.filter(Column("needs_push") == 1).fetchAll(db)
+        }
+    }
+
+    private func getDirtyTimeEntries(dbQueue: DatabaseQueue) throws -> [TimeEntry] {
+        try dbQueue.read { db in
+            try TimeEntry.filter(Column("needs_push") == 1).fetchAll(db)
+        }
+    }
+
+    private func getDirtySavedSearches(dbQueue: DatabaseQueue) throws -> [SavedSearch] {
+        try dbQueue.read { db in
+            try SavedSearch.filter(Column("needs_push") == 1).fetchAll(db)
+        }
+    }
+
+    private func updateLocalRecordsAfterPush(savedRecords: [CKRecord], dbQueue: DatabaseQueue) throws {
+        try dbQueue.write { db in
+            for record in savedRecords {
+                let recordName = record.recordID.recordName
+                let changeTag = record.recordChangeTag
+                let systemFields = CKRecordConverters.encodeSystemFields(record)
+
+                switch record.recordType {
+                case CloudKitManager.RecordType.item:
+                    try db.execute(
+                        sql: "UPDATE items SET needs_push = 0, ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                        arguments: [changeTag, systemFields, recordName]
+                    )
+
+                case CloudKitManager.RecordType.tag:
+                    try db.execute(
+                        sql: "UPDATE tags SET needs_push = 0, ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                        arguments: [changeTag, systemFields, recordName]
+                    )
+
+                case CloudKitManager.RecordType.itemTag:
+                    try db.execute(
+                        sql: "UPDATE item_tags SET needs_push = 0, ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                        arguments: [changeTag, systemFields, recordName]
+                    )
+
+                case CloudKitManager.RecordType.timeEntry:
+                    try db.execute(
+                        sql: "UPDATE time_entries SET needs_push = 0, ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                        arguments: [changeTag, systemFields, recordName]
+                    )
+
+                case CloudKitManager.RecordType.savedSearch:
+                    try db.execute(
+                        sql: "UPDATE saved_searches SET needs_push = 0, ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                        arguments: [changeTag, systemFields, recordName]
+                    )
+
+                default:
+                    break
+                }
+            }
+        }
+    }
+
+    private func markDeletedRecordsAsSynced(recordIDs: [CKRecord.ID], dbQueue: DatabaseQueue) throws {
+        try dbQueue.write { db in
+            for recordID in recordIDs {
+                let recordName = recordID.recordName
+
+                // Clear needs_push, change tag, and system fields so any future re-creation
+                // will be treated as a new insert (not an update to a deleted record)
+                // Try all tables since we don't know which one it belongs to
+                try db.execute(
+                    sql: "UPDATE items SET needs_push = 0, ck_change_tag = NULL, ck_system_fields = NULL WHERE ck_record_name = ?",
+                    arguments: [recordName]
+                )
+                try db.execute(
+                    sql: "UPDATE tags SET needs_push = 0, ck_change_tag = NULL, ck_system_fields = NULL WHERE ck_record_name = ?",
+                    arguments: [recordName]
+                )
+                try db.execute(
+                    sql: "UPDATE item_tags SET needs_push = 0, ck_change_tag = NULL, ck_system_fields = NULL WHERE ck_record_name = ?",
+                    arguments: [recordName]
+                )
+                try db.execute(
+                    sql: "UPDATE time_entries SET needs_push = 0, ck_change_tag = NULL, ck_system_fields = NULL WHERE ck_record_name = ?",
+                    arguments: [recordName]
+                )
+                try db.execute(
+                    sql: "UPDATE saved_searches SET needs_push = 0, ck_change_tag = NULL, ck_system_fields = NULL WHERE ck_record_name = ?",
+                    arguments: [recordName]
+                )
+            }
+        }
+    }
+}

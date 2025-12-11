@@ -1,3 +1,4 @@
+import DirectGTDCore
 import XCTest
 @testable import DirectGTD
 
@@ -26,7 +27,7 @@ final class NotesTests: XCTestCase {
         let testDb = TestDatabaseWrapper()
         repository = ItemRepository(database: testDb)
         let settings = UserSettings()
-        itemStore = ItemStore(settings: settings, repository: repository)
+        itemStore = ItemStore(settings: settings, repository: repository, database: testDb)
         undoManager = UndoManager()
         itemStore.undoManager = undoManager
     }

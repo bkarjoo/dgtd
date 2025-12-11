@@ -1,3 +1,4 @@
+import DirectGTDCore
 import XCTest
 import GRDB
 @testable import DirectGTD
@@ -14,7 +15,7 @@ final class UndoCoalescingTests: XCTestCase {
         testDB = TestDatabaseWrapper()
         repository = ItemRepository(database: testDB)
         settings = UserSettings()
-        itemStore = ItemStore(settings: settings, repository: repository)
+        itemStore = ItemStore(settings: settings, repository: repository, database: testDB)
         undoManager = UndoManager()
         itemStore.undoManager = undoManager
         itemStore.loadItems()

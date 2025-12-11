@@ -1,13 +1,9 @@
+import DirectGTDCore
 import Foundation
 import GRDB
 
-// MARK: - DatabaseProvider Protocol
-public protocol DatabaseProvider {
-    func getQueue() -> DatabaseQueue?
-}
-
 // MARK: - Database Implementation
-open class Database: DatabaseProvider {
+open class Database: DatabaseProvider, @unchecked Sendable {
     public static let shared = Database()
 
     private static let pendingRestoreKey = "pendingRestorePath"
@@ -279,6 +275,269 @@ open class Database: DatabaseProvider {
             NSLog("Database: Created indexes for time_entries")
 
             NSLog("Database: Migration v8 completed successfully")
+        }
+
+        // Register v9 migration (CloudKit sync fields)
+        migrator.registerMigration("v9") { db in
+            NSLog("Database: Running migration v9 (CloudKit sync fields)")
+
+            // Disable foreign keys for table recreation
+            try db.execute(sql: "PRAGMA foreign_keys = OFF")
+
+            // ============================================
+            // PART 1: Add modified_at to tables missing it
+            // ============================================
+
+            // item_tags needs timestamps for conflict resolution
+            if try !db.columns(in: "item_tags").contains(where: { $0.name == "created_at" }) {
+                try db.execute(sql: "ALTER TABLE item_tags ADD COLUMN created_at INTEGER")
+                try db.execute(sql: "ALTER TABLE item_tags ADD COLUMN modified_at INTEGER")
+                try db.execute(sql: "UPDATE item_tags SET created_at = strftime('%s', 'now'), modified_at = strftime('%s', 'now') WHERE created_at IS NULL")
+                NSLog("Database: Added timestamps to item_tags")
+            }
+
+            // time_entries needs modified_at
+            if try !db.columns(in: "time_entries").contains(where: { $0.name == "modified_at" }) {
+                try db.execute(sql: "ALTER TABLE time_entries ADD COLUMN modified_at INTEGER")
+                try db.execute(sql: "UPDATE time_entries SET modified_at = COALESCE(ended_at, started_at) WHERE modified_at IS NULL")
+                NSLog("Database: Added modified_at to time_entries")
+            }
+
+            // tags needs timestamps
+            if try !db.columns(in: "tags").contains(where: { $0.name == "created_at" }) {
+                try db.execute(sql: "ALTER TABLE tags ADD COLUMN created_at INTEGER")
+                try db.execute(sql: "ALTER TABLE tags ADD COLUMN modified_at INTEGER")
+                try db.execute(sql: "UPDATE tags SET created_at = strftime('%s', 'now'), modified_at = strftime('%s', 'now') WHERE created_at IS NULL")
+                NSLog("Database: Added timestamps to tags")
+            }
+
+            // ============================================
+            // PART 2: Add sync tracking columns to all tables
+            // ============================================
+
+            // items: sync fields
+            if try !db.columns(in: "items").contains(where: { $0.name == "ck_record_name" }) {
+                try db.execute(sql: "ALTER TABLE items ADD COLUMN ck_record_name TEXT")
+                try db.execute(sql: "ALTER TABLE items ADD COLUMN ck_change_tag TEXT")
+                try db.execute(sql: "ALTER TABLE items ADD COLUMN needs_push INTEGER DEFAULT 1")
+                try db.execute(sql: "ALTER TABLE items ADD COLUMN deleted_at INTEGER")
+                NSLog("Database: Added sync fields to items")
+            }
+
+            // tags: sync fields
+            if try !db.columns(in: "tags").contains(where: { $0.name == "ck_record_name" }) {
+                try db.execute(sql: "ALTER TABLE tags ADD COLUMN ck_record_name TEXT")
+                try db.execute(sql: "ALTER TABLE tags ADD COLUMN ck_change_tag TEXT")
+                try db.execute(sql: "ALTER TABLE tags ADD COLUMN needs_push INTEGER DEFAULT 1")
+                try db.execute(sql: "ALTER TABLE tags ADD COLUMN deleted_at INTEGER")
+                NSLog("Database: Added sync fields to tags")
+            }
+
+            // item_tags: sync fields
+            if try !db.columns(in: "item_tags").contains(where: { $0.name == "ck_record_name" }) {
+                try db.execute(sql: "ALTER TABLE item_tags ADD COLUMN ck_record_name TEXT")
+                try db.execute(sql: "ALTER TABLE item_tags ADD COLUMN ck_change_tag TEXT")
+                try db.execute(sql: "ALTER TABLE item_tags ADD COLUMN needs_push INTEGER DEFAULT 1")
+                try db.execute(sql: "ALTER TABLE item_tags ADD COLUMN deleted_at INTEGER")
+                NSLog("Database: Added sync fields to item_tags")
+            }
+
+            // time_entries: sync fields
+            if try !db.columns(in: "time_entries").contains(where: { $0.name == "ck_record_name" }) {
+                try db.execute(sql: "ALTER TABLE time_entries ADD COLUMN ck_record_name TEXT")
+                try db.execute(sql: "ALTER TABLE time_entries ADD COLUMN ck_change_tag TEXT")
+                try db.execute(sql: "ALTER TABLE time_entries ADD COLUMN needs_push INTEGER DEFAULT 1")
+                try db.execute(sql: "ALTER TABLE time_entries ADD COLUMN deleted_at INTEGER")
+                NSLog("Database: Added sync fields to time_entries")
+            }
+
+            // saved_searches: sync fields
+            if try !db.columns(in: "saved_searches").contains(where: { $0.name == "ck_record_name" }) {
+                try db.execute(sql: "ALTER TABLE saved_searches ADD COLUMN ck_record_name TEXT")
+                try db.execute(sql: "ALTER TABLE saved_searches ADD COLUMN ck_change_tag TEXT")
+                try db.execute(sql: "ALTER TABLE saved_searches ADD COLUMN needs_push INTEGER DEFAULT 1")
+                try db.execute(sql: "ALTER TABLE saved_searches ADD COLUMN deleted_at INTEGER")
+                NSLog("Database: Added sync fields to saved_searches")
+            }
+
+            // ============================================
+            // PART 3: Create sync_metadata table
+            // ============================================
+
+            if try !db.tableExists("sync_metadata") {
+                try db.execute(sql: """
+                    CREATE TABLE sync_metadata (
+                        key TEXT PRIMARY KEY,
+                        value BLOB
+                    )
+                """)
+                NSLog("Database: Created sync_metadata table")
+            }
+
+            // ============================================
+            // PART 4: Create indexes
+            // ============================================
+
+            // Unique indexes on ck_record_name
+            try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_items_ck_record_name ON items(ck_record_name) WHERE ck_record_name IS NOT NULL")
+            try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_ck_record_name ON tags(ck_record_name) WHERE ck_record_name IS NOT NULL")
+            try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_item_tags_ck_record_name ON item_tags(ck_record_name) WHERE ck_record_name IS NOT NULL")
+            try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_time_entries_ck_record_name ON time_entries(ck_record_name) WHERE ck_record_name IS NOT NULL")
+            try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_searches_ck_record_name ON saved_searches(ck_record_name) WHERE ck_record_name IS NOT NULL")
+
+            // Indexes for efficient dirty queries
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_items_needs_push ON items(needs_push) WHERE needs_push = 1")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_tags_needs_push ON tags(needs_push) WHERE needs_push = 1")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_item_tags_needs_push ON item_tags(needs_push) WHERE needs_push = 1")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_time_entries_needs_push ON time_entries(needs_push) WHERE needs_push = 1")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_saved_searches_needs_push ON saved_searches(needs_push) WHERE needs_push = 1")
+
+            NSLog("Database: Created sync indexes")
+
+            // ============================================
+            // PART 5: Recreate tables to remove CASCADE deletes
+            // ============================================
+
+            // Recreate item_tags without CASCADE
+            try db.execute(sql: """
+                CREATE TABLE item_tags_new (
+                    item_id TEXT NOT NULL,
+                    tag_id TEXT NOT NULL,
+                    created_at INTEGER,
+                    modified_at INTEGER,
+                    ck_record_name TEXT,
+                    ck_change_tag TEXT,
+                    needs_push INTEGER DEFAULT 1,
+                    deleted_at INTEGER,
+                    PRIMARY KEY (item_id, tag_id),
+                    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE NO ACTION,
+                    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE NO ACTION
+                )
+            """)
+            try db.execute(sql: "INSERT INTO item_tags_new SELECT item_id, tag_id, created_at, modified_at, ck_record_name, ck_change_tag, needs_push, deleted_at FROM item_tags")
+            try db.execute(sql: "DROP TABLE item_tags")
+            try db.execute(sql: "ALTER TABLE item_tags_new RENAME TO item_tags")
+            // Recreate all indexes that existed before migration
+            try db.execute(sql: "CREATE INDEX idx_item_tags_item ON item_tags(item_id)")
+            try db.execute(sql: "CREATE INDEX idx_item_tags_tag ON item_tags(tag_id)")
+            try db.execute(sql: "CREATE UNIQUE INDEX idx_item_tags_ck_record_name ON item_tags(ck_record_name) WHERE ck_record_name IS NOT NULL")
+            try db.execute(sql: "CREATE INDEX idx_item_tags_needs_push ON item_tags(needs_push) WHERE needs_push = 1")
+            NSLog("Database: Recreated item_tags without CASCADE")
+
+            // Recreate time_entries without CASCADE
+            try db.execute(sql: """
+                CREATE TABLE time_entries_new (
+                    id TEXT PRIMARY KEY,
+                    item_id TEXT NOT NULL,
+                    started_at INTEGER NOT NULL,
+                    ended_at INTEGER,
+                    duration INTEGER,
+                    modified_at INTEGER,
+                    ck_record_name TEXT,
+                    ck_change_tag TEXT,
+                    needs_push INTEGER DEFAULT 1,
+                    deleted_at INTEGER,
+                    FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE NO ACTION
+                )
+            """)
+            try db.execute(sql: "INSERT INTO time_entries_new SELECT id, item_id, started_at, ended_at, duration, modified_at, ck_record_name, ck_change_tag, needs_push, deleted_at FROM time_entries")
+            try db.execute(sql: "DROP TABLE time_entries")
+            try db.execute(sql: "ALTER TABLE time_entries_new RENAME TO time_entries")
+            try db.execute(sql: "CREATE UNIQUE INDEX idx_time_entries_ck_record_name ON time_entries(ck_record_name) WHERE ck_record_name IS NOT NULL")
+            try db.execute(sql: "CREATE INDEX idx_time_entries_needs_push ON time_entries(needs_push) WHERE needs_push = 1")
+            try db.execute(sql: "CREATE INDEX idx_time_entries_item_id ON time_entries(item_id)")
+            try db.execute(sql: "CREATE INDEX idx_time_entries_started_at ON time_entries(started_at)")
+            NSLog("Database: Recreated time_entries without CASCADE")
+
+            // Recreate items without CASCADE on parent_id
+            try db.execute(sql: """
+                CREATE TABLE items_new (
+                    id TEXT PRIMARY KEY,
+                    title TEXT,
+                    item_type TEXT DEFAULT 'Unknown',
+                    notes TEXT,
+                    parent_id TEXT,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    modified_at INTEGER NOT NULL,
+                    completed_at INTEGER,
+                    due_date INTEGER,
+                    earliest_start_time INTEGER,
+                    ck_record_name TEXT,
+                    ck_change_tag TEXT,
+                    needs_push INTEGER DEFAULT 1,
+                    deleted_at INTEGER,
+                    FOREIGN KEY (parent_id) REFERENCES items(id) ON DELETE NO ACTION
+                )
+            """)
+            try db.execute(sql: "INSERT INTO items_new SELECT id, title, item_type, notes, parent_id, sort_order, created_at, modified_at, completed_at, due_date, earliest_start_time, ck_record_name, ck_change_tag, needs_push, deleted_at FROM items")
+            try db.execute(sql: "DROP TABLE items")
+            try db.execute(sql: "ALTER TABLE items_new RENAME TO items")
+            try db.execute(sql: "CREATE UNIQUE INDEX idx_items_ck_record_name ON items(ck_record_name) WHERE ck_record_name IS NOT NULL")
+            try db.execute(sql: "CREATE INDEX idx_items_needs_push ON items(needs_push) WHERE needs_push = 1")
+            try db.execute(sql: "CREATE INDEX idx_parent_id ON items(parent_id)")
+            NSLog("Database: Recreated items without CASCADE")
+
+            // ============================================
+            // PART 6: Bootstrap existing data for first sync
+            // ============================================
+
+            try db.execute(sql: "UPDATE items SET ck_record_name = 'Item_' || id WHERE ck_record_name IS NULL")
+            try db.execute(sql: "UPDATE tags SET ck_record_name = 'Tag_' || id WHERE ck_record_name IS NULL")
+            try db.execute(sql: "UPDATE item_tags SET ck_record_name = 'ItemTag_' || item_id || '_' || tag_id WHERE ck_record_name IS NULL")
+            try db.execute(sql: "UPDATE time_entries SET ck_record_name = 'TimeEntry_' || id WHERE ck_record_name IS NULL")
+            try db.execute(sql: "UPDATE saved_searches SET ck_record_name = 'SavedSearch_' || id WHERE ck_record_name IS NULL")
+
+            // All existing data needs initial push
+            try db.execute(sql: "UPDATE items SET needs_push = 1")
+            try db.execute(sql: "UPDATE tags SET needs_push = 1")
+            try db.execute(sql: "UPDATE item_tags SET needs_push = 1")
+            try db.execute(sql: "UPDATE time_entries SET needs_push = 1")
+            try db.execute(sql: "UPDATE saved_searches SET needs_push = 1")
+
+            NSLog("Database: Bootstrapped existing data for sync")
+
+            // Re-enable foreign keys
+            try db.execute(sql: "PRAGMA foreign_keys = ON")
+
+            NSLog("Database: Migration v9 completed successfully")
+        }
+
+        // Register v10 migration (add ck_system_fields for CKRecord system field restoration)
+        migrator.registerMigration("v10") { db in
+            NSLog("Database: Running migration v10 (add ck_system_fields column)")
+
+            // items: add ck_system_fields
+            if try !db.columns(in: "items").contains(where: { $0.name == "ck_system_fields" }) {
+                try db.execute(sql: "ALTER TABLE items ADD COLUMN ck_system_fields BLOB")
+                NSLog("Database: Added ck_system_fields to items")
+            }
+
+            // tags: add ck_system_fields
+            if try !db.columns(in: "tags").contains(where: { $0.name == "ck_system_fields" }) {
+                try db.execute(sql: "ALTER TABLE tags ADD COLUMN ck_system_fields BLOB")
+                NSLog("Database: Added ck_system_fields to tags")
+            }
+
+            // item_tags: add ck_system_fields
+            if try !db.columns(in: "item_tags").contains(where: { $0.name == "ck_system_fields" }) {
+                try db.execute(sql: "ALTER TABLE item_tags ADD COLUMN ck_system_fields BLOB")
+                NSLog("Database: Added ck_system_fields to item_tags")
+            }
+
+            // time_entries: add ck_system_fields
+            if try !db.columns(in: "time_entries").contains(where: { $0.name == "ck_system_fields" }) {
+                try db.execute(sql: "ALTER TABLE time_entries ADD COLUMN ck_system_fields BLOB")
+                NSLog("Database: Added ck_system_fields to time_entries")
+            }
+
+            // saved_searches: add ck_system_fields
+            if try !db.columns(in: "saved_searches").contains(where: { $0.name == "ck_system_fields" }) {
+                try db.execute(sql: "ALTER TABLE saved_searches ADD COLUMN ck_system_fields BLOB")
+                NSLog("Database: Added ck_system_fields to saved_searches")
+            }
+
+            NSLog("Database: Migration v10 completed successfully")
         }
 
         // Handle backward compatibility: Detect legacy databases and reset them

@@ -1,3 +1,4 @@
+import DirectGTDCore
 //
 //  DirectGTDApp.swift
 //  DirectGTD
@@ -9,6 +10,9 @@ import SwiftUI
 
 @main
 struct DirectGTDApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var syncEngine = SyncEngine()
+
     init() {
         NSLog("DirectGTDApp: Program started")
 
@@ -26,7 +30,16 @@ struct DirectGTDApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(syncEngine: syncEngine)
+                .onAppear {
+                    // Wire up the sync engine to the app delegate for remote notifications
+                    appDelegate.syncEngine = syncEngine
+
+                    // Start the sync engine
+                    Task {
+                        await syncEngine.start()
+                    }
+                }
         }
     }
 }

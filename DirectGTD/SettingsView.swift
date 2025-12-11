@@ -1,14 +1,17 @@
+import DirectGTDCore
 import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var settings: UserSettings
     @ObservedObject var store: ItemStore
+    @ObservedObject var syncEngine: SyncEngine
     @StateObject private var backupService = BackupService.shared
     @Environment(\.dismiss) var dismiss
     @State private var quickCaptureFolderId: String?
     @State private var archiveFolderId: String?
     @State private var showingTagManager: Bool = false
     @State private var showingBackupManager: Bool = false
+    @State private var showingResetSyncConfirmation: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -84,6 +87,50 @@ struct SettingsView: View {
                 }
             }
 
+            Section("iCloud Sync") {
+                Toggle("Enable iCloud Sync", isOn: $syncEngine.isSyncEnabled)
+
+                HStack {
+                    Text("Status")
+                    Spacer()
+                    syncStatusText
+                }
+
+                if let accountName = syncEngine.iCloudAccountName {
+                    HStack {
+                        Text("Account")
+                        Spacer()
+                        Text(accountName)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                if let lastSync = syncEngine.lastSyncDate {
+                    HStack {
+                        Text("Last Sync")
+                        Spacer()
+                        Text(lastSync, style: .relative)
+                            .foregroundColor(.secondary)
+                        Text("ago")
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Button(action: {
+                    syncEngine.requestSync()
+                }) {
+                    Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(!syncEngine.isSyncEnabled || isSyncing)
+
+                Button(role: .destructive, action: {
+                    showingResetSyncConfirmation = true
+                }) {
+                    Label("Reset Sync Data", systemImage: "arrow.counterclockwise")
+                }
+                .disabled(isSyncing)
+            }
+
             Section("Debug (Temporary)") {
                 HStack {
                     Text("Selected Item ID:")
@@ -135,7 +182,7 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
         }
-        .frame(width: 400, height: 400)
+        .frame(width: 400, height: 550)
         .onAppear {
             loadQuickCaptureFolder()
             loadArchiveFolder()
@@ -153,6 +200,60 @@ struct SettingsView: View {
             Button("Later", role: .cancel) {}
         } message: {
             Text("You have \(backupService.backupCount) backups. Would you like to delete some old ones?")
+        }
+        .alert("Reset Sync Data", isPresented: $showingResetSyncConfirmation) {
+            Button("Reset", role: .destructive) {
+                Task {
+                    try? await syncEngine.resetSyncState()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will clear all sync metadata and re-sync all data from scratch. Your data will not be deleted. Continue?")
+        }
+    }
+
+    private var isSyncing: Bool {
+        switch syncEngine.status {
+        case .syncing, .initialSync:
+            return true
+        default:
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private var syncStatusText: some View {
+        switch syncEngine.status {
+        case .disabled:
+            if !syncEngine.isSyncEnabled {
+                Text("Disabled")
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Not Available")
+                    .foregroundColor(.orange)
+            }
+        case .idle:
+            Text("Ready")
+                .foregroundColor(.green)
+        case .syncing:
+            HStack(spacing: 4) {
+                ProgressView()
+                    .scaleEffect(0.5)
+                Text("Syncing...")
+                    .foregroundColor(.secondary)
+            }
+        case .initialSync(let progress, _):
+            HStack(spacing: 4) {
+                ProgressView()
+                    .scaleEffect(0.5)
+                Text("Initial sync \(Int(progress * 100))%")
+                    .foregroundColor(.secondary)
+            }
+        case .error(let message):
+            Text(message)
+                .foregroundColor(.red)
+                .lineLimit(1)
         }
     }
 
@@ -183,5 +284,5 @@ struct SettingsView: View {
 
 #Preview {
     let settings = UserSettings()
-    SettingsView(settings: settings, store: ItemStore(settings: settings))
+    SettingsView(settings: settings, store: ItemStore(settings: settings), syncEngine: SyncEngine())
 }

@@ -1,3 +1,4 @@
+import DirectGTDCore
 import XCTest
 @testable import DirectGTD
 

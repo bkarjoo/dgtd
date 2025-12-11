@@ -1,3 +1,4 @@
+import DirectGTDCore
 import Foundation
 import SwiftUI
 import Combine
@@ -38,14 +39,17 @@ class ItemStore: ObservableObject {
     @Published private(set) var itemTimeTotals: [String: Int] = [:]  // Cache: itemId -> total seconds
 
     private let repository: ItemRepository
+    private let softDeleteService: SoftDeleteService
     let settings: UserSettings
     var undoManager: UndoManager?
     private var pendingCreatedItemIds: Set<String> = []
-    private var databaseObserver: DatabaseCancellable?
+    private var databaseObserver: DirectGTDCore.DatabaseCancellable?
 
-    init(settings: UserSettings, repository: ItemRepository = ItemRepository()) {
+    init(settings: UserSettings, repository: ItemRepository = ItemRepository(), database: DatabaseProvider = Database.shared) {
         self.settings = settings
         self.repository = repository
+        // Initialize SoftDeleteService with the same database provider as the repository
+        self.softDeleteService = SoftDeleteService(database: database)
         NSLog("ItemStore initialized - console is working!")
     }
 
@@ -956,7 +960,7 @@ class ItemStore: ObservableObject {
         let orderedItems = getAllItemsInOrder()
         guard let currentIndex = orderedItems.firstIndex(where: { $0.id == itemId }) else { return }
 
-        // Save entire subtree for undo (descendants will be cascade deleted)
+        // Save entire subtree for undo (descendants will be cascade soft-deleted)
         guard let itemToDelete = items.first(where: { $0.id == itemId }) else { return }
         let subtree = collectSubtree(itemId: itemId)
 
@@ -968,7 +972,8 @@ class ItemStore: ObservableObject {
         }
 
         do {
-            try repository.delete(itemId: itemId)
+            // Use soft-delete service instead of hard delete
+            try softDeleteService.softDeleteItem(id: itemId)
 
             // Register undo only after successful delete - call restore to enable redo
             undoManager?.registerUndo(withTarget: self) { store in
@@ -1093,8 +1098,10 @@ class ItemStore: ObservableObject {
     private func restoreSubtree(subtree: [Item], itemTags: [ItemTag], selectItemId: String) {
         do {
             pendingCreatedItemIds.subtract(subtree.map { $0.id })
-            // Recreate all items and their tag relationships in a transaction
-            try repository.createItemsWithTags(items: subtree, itemTags: itemTags)
+            // Undelete all items and their tag relationships (soft-deleted records still exist)
+            let itemIds = subtree.map { $0.id }
+            let itemTagKeys = itemTags.map { ($0.itemId, $0.tagId) }
+            try repository.undeleteItemsWithTags(itemIds: itemIds, itemTagKeys: itemTagKeys)
             loadItems()
             selectedItemId = selectItemId
 
@@ -1243,7 +1250,8 @@ class ItemStore: ObservableObject {
                 filteredByTag = nil
             }
 
-            try repository.deleteTag(tagId: tagId)
+            // Use soft-delete service instead of hard delete
+            try softDeleteService.softDeleteTag(id: tagId)
             loadTags()
 
             // Register undo - preserve original tag with same ID and restore filter if needed
@@ -1258,13 +1266,8 @@ class ItemStore: ObservableObject {
 
     private func restoreTag(tag: Tag, itemIds: [String], restoreAsFilter: Bool = false) {
         do {
-            // Recreate tag with original ID (no undo recording)
-            try repository.createTag(tag)
-
-            // Re-associate with items (no undo recording)
-            for itemId in itemIds {
-                try repository.addTagToItem(itemId: itemId, tagId: tag.id)
-            }
+            // Undelete the tag and its item_tag associations (soft-deleted records still exist)
+            try repository.undeleteTag(tagId: tag.id, itemIds: itemIds)
 
             loadTags()
 
@@ -1481,12 +1484,13 @@ class ItemStore: ObservableObject {
         }
     }
 
-    /// Deletes a time entry by ID
+    /// Deletes a time entry by ID (soft-delete)
     func deleteTimeEntry(id: String) {
         do {
             // Get the entry first to update cache
             if let entry = try repository.getTimeEntry(id: id) {
-                try repository.deleteTimeEntry(id: id)
+                // Use soft-delete service instead of hard delete
+                try softDeleteService.softDeleteTimeEntry(id: id)
 
                 // Remove from active entries if it was running
                 activeTimeEntries.removeAll { $0.id == id }

@@ -1,3 +1,4 @@
+import DirectGTDCore
 import XCTest
 @testable import DirectGTD
 
@@ -12,7 +13,8 @@ final class DeletionTests: XCTestCase {
         let testDb = TestDatabaseWrapper()
         repository = ItemRepository(database: testDb)
         settings = UserSettings()
-        itemStore = ItemStore(settings: settings, repository: repository)
+        // Pass the same database provider to ItemStore so SoftDeleteService uses the test DB
+        itemStore = ItemStore(settings: settings, repository: repository, database: testDb)
         undoManager = UndoManager()
         itemStore.undoManager = undoManager
     }
