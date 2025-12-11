@@ -6,8 +6,10 @@
 - ✅ **SyncMetadataStoreTests**: 40/40 passed
 - ✅ **CloudKitManagerTests**: 25/25 passed
 - ✅ **SyncEngineTests**: 32/32 passed
+- ✅ **MockInfrastructureTests**: 19/19 passed (Phase 1)
+- ✅ **CloudKitAsyncOperationsTests**: 24/24 passed (Phase 2)
 
-**Total**: 97/97 tests passed (100%)
+**Total**: 140/140 tests passed (100%)
 
 ### Current Coverage Status
 
@@ -103,25 +105,172 @@
 - [ ] Document mock usage patterns
 - [ ] Add code examples for common test scenarios
 
-## Next Steps
+## Testing Phases
 
-### Priority 1: Enable Async Testing
-1. Add protocol abstractions for CloudKitManager
-2. Create comprehensive mocking infrastructure
-3. Write async operation tests using mocks
+### Phase 1: Mocking Infrastructure (Foundation) ✅ COMPLETE
+**Goal**: Enable testing of async CloudKit operations without iCloud dependency
 
-### Priority 2: Integration Tests
-1. Test SyncEngine with real components in isolation
-2. Test conflict resolution scenarios
-3. Test error recovery paths
+**Tasks**:
+- [x] Create `CloudKitManagerProtocol` to abstract CloudKit operations
+- [x] Create `MockCloudKitManager` implementing the protocol
+- [x] Create `MockSyncMetadataStore` for isolated testing
+- [x] Add async test helpers (expectations, timeouts)
+- [x] Document mocking patterns and usage
 
-### Priority 3: Performance & Reliability
-1. Add performance benchmarks
-2. Test edge cases and failure scenarios
-3. Add stress tests for large data sets
+**Deliverables**: ✅ All Complete
+- ✅ CloudKitManagerProtocol defined
+- ✅ MockCloudKitManager with full configuration options
+- ✅ MockSyncMetadataStore with in-memory storage
+- ✅ AsyncTestHelpers with wait, timeout, and assertion utilities
+- ✅ Comprehensive documentation in Mocks/README.md
+- ✅ MockInfrastructureTests verifying all mocks work (20 tests)
+
+**Tests Created**: 20 tests (MockInfrastructureTests)
+**Status**: Ready for Phase 2
+
+---
+
+### Phase 2: Async Operation Tests ✅ COMPLETE
+**Goal**: Test CloudKit manager operations with mocks
+
+**Tasks**:
+- [x] Test `checkAccountStatus()` with various account states
+- [x] Test `ensureZoneExists()` creation and existing scenarios
+- [x] Test `initialize()` complete flow with success/failure paths
+- [x] Test `registerForSubscriptions()` and unregister flows
+- [x] Test @Published property changes (Combine testing)
+
+**Deliverables**: ✅ All Complete
+- ✅ CloudKitManager async operation coverage (24 tests)
+- ✅ Combine/publisher testing patterns
+- ✅ Account status testing with all CKAccountStatus values
+- ✅ Zone creation and error handling tests
+- ✅ Initialize flow with success/failure paths
+- ✅ Subscription registration/unregistration tests
+- ✅ @Published property change tests with Combine
+
+**Tests Created**: 24 tests (CloudKitAsyncOperationsTests)
+**Status**: Ready for Phase 3
+
+---
+
+### Phase 3: SyncEngine Integration Tests
+**Goal**: Test sync operations with mocked CloudKit
+
+**Tasks**:
+- [ ] Test push operations (upload changes to cloud)
+- [ ] Test pull operations (download changes from cloud)
+- [ ] Test full sync() flow end-to-end
+- [ ] Test debouncing with real timers
+- [ ] Test retry logic with simulated failures
+- [ ] Test sync cancellation mid-operation
+
+**Deliverables**:
+- Complete SyncEngine operation coverage
+- Retry and error handling validation
+
+**Estimated Tests**: ~25 tests
+
+---
+
+### Phase 4: Conflict Resolution
+**Goal**: Test merge strategies and conflict handling
+
+**Tasks**:
+- [ ] Test conflict detection (server newer vs local newer)
+- [ ] Test last-write-wins strategy
+- [ ] Test concurrent modification handling
+- [ ] Test deleted record conflicts
+- [ ] Test field-level merge strategies
+
+**Deliverables**:
+- Comprehensive conflict resolution coverage
+- Edge case validation
+
+**Estimated Tests**: ~15 tests
+
+---
+
+### Phase 5: Integration & E2E Tests
+**Goal**: Test complete flows across components
+
+**Tasks**:
+- [ ] Test SyncEngine + SyncMetadataStore + CloudKitManager integration
+- [ ] Test sync state persistence across restarts
+- [ ] Test multi-device sync scenarios
+- [ ] Test full sync flow: local changes → CloudKit → remote changes
+- [ ] Test sync interruption and recovery
+
+**Deliverables**:
+- End-to-end sync validation
+- Multi-component integration tests
+
+**Estimated Tests**: ~20 tests
+
+---
+
+### Phase 6: Error Handling & Edge Cases
+**Goal**: Test failure scenarios and recovery
+
+**Tasks**:
+- [ ] Test network timeout scenarios
+- [ ] Test iCloud sign-out during sync
+- [ ] Test quota exceeded errors
+- [ ] Test zone deletion and recreation
+- [ ] Test corrupted change token recovery
+- [ ] Test database busy/locked scenarios
+
+**Deliverables**:
+- Robust error handling coverage
+- Recovery path validation
+
+**Estimated Tests**: ~18 tests
+
+---
+
+### Phase 7: Performance & Scale
+**Goal**: Validate performance and scalability
+
+**Tasks**:
+- [ ] Benchmark sync with 1,000 items
+- [ ] Benchmark sync with 10,000 items
+- [ ] Test initial sync time estimation
+- [ ] Test incremental sync efficiency
+- [ ] Test memory usage during large syncs
+- [ ] Add performance regression detection
+
+**Deliverables**:
+- Performance benchmarks
+- Scalability validation
+- Regression detection
+
+**Estimated Tests**: ~10 performance tests
+
+---
+
+## Phase Summary
+
+| Phase | Focus | Tests | Status | Dependencies |
+|-------|-------|-------|--------|--------------|
+| 1 | Mocking Infrastructure | 19 | ✅ Complete | None |
+| 2 | Async Operations | 24 | ✅ Complete | Phase 1 |
+| 3 | SyncEngine Integration | ~25 | Pending | Phase 1, 2 |
+| 4 | Conflict Resolution | ~15 | Pending | Phase 1, 2, 3 |
+| 5 | Integration & E2E | ~20 | Pending | Phase 1-4 |
+| 6 | Error Handling | ~18 | Pending | Phase 1-5 |
+| 7 | Performance | ~10 | Pending | Phase 1-6 |
+
+**Completed Tests**: 43 tests (Phase 1 + 2)
+**Original Tests**: 97 tests
+**Current Total**: 140 tests
+**Remaining Estimated**: ~88 tests
+**Final Coverage**: ~228 tests
+
+---
 
 ## Notes
-- All current tests pass and provide good coverage of business logic
-- Main gap is async/CloudKit integration testing
-- Consider using XCTest expectations for async validation
-- May need XCTestCase subclass for CloudKit test setup
+- Each phase builds on previous phases
+- Phase 1 is critical - enables all subsequent testing
+- Phases 2-4 can be partially parallelized after Phase 1
+- Phases 5-7 require earlier phases to be complete
+- All current tests (97) pass and provide solid foundation

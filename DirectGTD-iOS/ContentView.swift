@@ -11,23 +11,19 @@ import UIKit
 
 struct ContentView: View {
     @StateObject private var viewModel = TreeViewModel()
-    @State private var searchText = ""
-    @State private var isSearching = false
+    @State private var showingSearch = false
     @State private var showingSettings = false
     @State private var showingQuickCapture = false
-    @FocusState private var searchFieldFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            VStack(spacing: 0) {
-                // Custom header bar
-                headerBar
+        NavigationStack {
+            ZStack(alignment: .bottomTrailing) {
+                VStack(spacing: 0) {
+                    // Custom header bar
+                    headerBar
 
-                // Main content
-                if isSearching {
-                    searchableTreeView
-                } else {
+                    // Main content
                     TreeView()
                         .highPriorityGesture(
                             DragGesture(minimumDistance: 30, coordinateSpace: .global)
@@ -41,30 +37,34 @@ struct ContentView: View {
                                 }
                         )
                 }
-            }
-            .sheet(isPresented: $showingSettings) {
-                SettingsView()
-                    .environmentObject(viewModel)
-            }
-            .sheet(isPresented: $showingQuickCapture) {
-                QuickCaptureView()
-                    .environmentObject(viewModel)
-            }
+                .sheet(isPresented: $showingSearch) {
+                    SearchView()
+                        .environmentObject(viewModel)
+                }
+                .sheet(isPresented: $showingSettings) {
+                    SettingsView()
+                        .environmentObject(viewModel)
+                }
+                .sheet(isPresented: $showingQuickCapture) {
+                    QuickCaptureView()
+                        .environmentObject(viewModel)
+                }
 
-            // Floating action button
-            Button {
-                showingQuickCapture = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 56, height: 56)
-                    .background(Color.accentColor)
-                    .clipShape(Circle())
-                    .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                // Floating action button
+                Button {
+                    showingQuickCapture = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 56, height: 56)
+                        .background(Color.accentColor)
+                        .clipShape(Circle())
+                        .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                }
+                .padding(.trailing, 60)
+                .padding(.bottom, 16)
             }
-            .padding(.trailing, 60)
-            .padding(.bottom, 16)
         }
         .environmentObject(viewModel)
         .task {
@@ -139,8 +139,7 @@ struct ContentView: View {
             // Right side buttons
             HStack(spacing: 16) {
                 Button {
-                    isSearching = true
-                    searchFieldFocused = true
+                    showingSearch = true
                 } label: {
                     Image(systemName: "magnifyingglass")
                 }
@@ -156,30 +155,6 @@ struct ContentView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
-    }
-
-    // MARK: - Searchable Tree View
-
-    @ViewBuilder
-    private var searchableTreeView: some View {
-        TreeView()
-            .searchable(
-                text: $searchText,
-                isPresented: $isSearching,
-                prompt: "Search items..."
-            )
-            .searchFocused($searchFieldFocused)
-            .onSubmit(of: .search) {
-                // TODO: show search results
-                isSearching = false
-                searchFieldFocused = false
-            }
-            .onChange(of: isSearching) { _, newValue in
-                if !newValue {
-                    searchText = ""
-                    searchFieldFocused = false
-                }
-            }
     }
 }
 
