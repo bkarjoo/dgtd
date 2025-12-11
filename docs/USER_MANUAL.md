@@ -1054,6 +1054,366 @@ Questions? Found a bug? Want to contribute?
 
 ---
 
+## DirectGTD for iOS
+
+**Your tasks in your pocket.**
+
+DirectGTD for iPhone is a companion app to the Mac version. It syncs automatically via iCloud and excels at quick capture, reviewing what's due, and completing tasks throughout the day.
+
+### What's Different from Mac
+
+**iOS is optimized for:**
+- ✓ Quick capture when ideas strike (< 2 seconds)
+- ✓ Reviewing what's due and overdue
+- ✓ Completing tasks on the go
+- ✓ Staying in sync with desktop
+
+**Complex operations stay on Mac:**
+- Bulk reorganization
+- Template creation and deep copying
+- SQL query writing and editing
+- Extensive keyboard shortcuts
+
+The phone is for **capturing, checking, and completing**. The Mac is for **organizing, planning, and power features**.
+
+---
+
+### Getting Started (iOS)
+
+**1. Install DirectGTD on iPhone**
+- Download from App Store
+- Sign in with same Apple ID as your Mac
+
+**2. First Launch**
+- Make sure you're signed in to iCloud
+- Initial sync downloads all data from iCloud
+- Progress overlay shows 0-100% during first sync
+- Takes 1-5 minutes depending on data size
+
+**3. Start Using**
+- Tree view appears with all your items
+- Tap **+** button for quick capture
+- Swipe to expand/collapse folders
+- Long-press for context menu
+- Everything syncs automatically
+
+---
+
+### iOS Interface Overview
+
+**Main Screen:**
+```
+┌─────────────────────────────────────────┐
+│  DirectGTD                   🔍  ⚙️     │ ← Toolbar
+├─────────────────────────────────────────┤
+│  ▶ Work Projects                        │
+│    ● Client Review           Apr 15  › │ ← Tree rows
+│    ○ Write proposal                  › │
+│  ▼ Personal                             │
+│    ○ Buy groceries                   › │
+│                                         │
+│                                   [+]   │ ← Quick capture
+└─────────────────────────────────────────┘
+```
+
+**Navigation:**
+- **Tree View** - Main screen, shows full hierarchy
+- **Search (🔍)** - Top right, opens search sheet
+- **Settings (⚙️)** - Top right, opens settings sheet
+- **Quick Capture (+)** - Bottom right floating button
+
+---
+
+### Tree View (iOS)
+
+**Expand/Collapse:**
+- Tap **disclosure triangle (▶)** to expand/collapse folders
+- Just like iOS Reminders and Notes apps
+- Expanded state persists across app launches
+- Smooth animations
+
+**Row Layout:**
+- **Left**: Indent + triangle (folders) or status icon (tasks)
+- **Center**: Title + metadata (due date, tags)
+- **Right**: Chevron (›) for detail view
+
+**Status Icons:**
+- ● **Filled circle** - Task with due date or incomplete
+- ○ **Empty circle** - Incomplete task
+- ✓ **Checkmark** - Completed task
+- ▶ **Triangle** - Folder/project (collapsed)
+- ▼ **Down triangle** - Folder/project (expanded)
+
+**Item Types:**
+All 12 item types from Mac appear with their icons (📋 Task, 📝 Note, 📁 Folder, etc.)
+
+---
+
+### Focus Mode (iOS)
+
+**Drill into any folder to see only its subtree.**
+
+**How to Focus:**
+1. Long-press any folder
+2. Select **"Focus"** from context menu
+3. View shows only that folder's children
+4. **Breadcrumb bar** appears at top: `Root > Projects > Work`
+
+**Navigating in Focus Mode:**
+- Tap any **breadcrumb segment** to navigate up
+- Tap **back button** to go up one level
+- Swipe **right from left edge** to go back (standard iOS gesture)
+- Tap **"Unfocus"** button to return to full tree
+
+**Why Focus?**
+- Reduces clutter when working on specific project
+- Faster scrolling through large hierarchies
+- Maintains context with breadcrumb trail
+
+---
+
+### Quick Capture (iOS)
+
+**Capture tasks in under 2 seconds.**
+
+**How to Use:**
+1. Tap floating **+ button** (bottom right)
+2. **Title field** auto-focuses with keyboard ready
+3. Type task title
+4. (Optional) Set type or due date
+5. Tap **Save** or hit **Return**
+6. Syncs immediately to iCloud
+
+**Where Items Go:**
+- Quick captured items go to **Inbox** or configured **Quick Capture Folder**
+- Setting syncs between Mac and iPhone
+- Change on either device affects both
+
+**Pro tip:** Add DirectGTD to iPhone home screen. Tap, type, done. Everything syncs automatically.
+
+---
+
+### Item Details (iOS)
+
+**View and edit any item.**
+
+**Accessing Details:**
+- Tap **chevron (›)** on any tree row
+- Opens full detail view
+
+**Detail View Shows:**
+- **Title** - Editable text field
+- **Type** - Picker for all 12 item types
+- **Due Date** - Date + time picker
+- **Earliest Start** - Date + time picker
+- **Tags** - Color-coded tag chips
+- **Notes** - Markdown preview (view mode) or plain text editor (edit mode)
+- **Time Tracking** - Total tracked time (read-only on iOS)
+
+**Editing:**
+- Tap **Edit** button (top right)
+- All fields become editable
+- Tap **Done** to save changes
+- Changes sync immediately
+
+**Phase 1 (Current):**
+- Detail view is read-only (view only)
+- Edit support coming in Phase 2
+
+**Phase 2 (In Development):**
+- Full editing of all fields
+- Type picker, date pickers
+- Tag management
+- Notes editing with markdown preview toggle
+
+---
+
+### Context Menu (iOS)
+
+**Long-press any item for quick actions.**
+
+**Available Actions:**
+- **Details** - Open detail view (read-only in Phase 1)
+- **Focus** - Drill into folder (folders only)
+- **Complete / Uncomplete** - Toggle task completion (Phase 2)
+- **Add Child** - Create child item (Phase 2)
+- **Delete** - Delete item with confirmation (Phase 2)
+- **Move to...** - Move to different parent (Phase 4)
+
+*Note: Write actions (Complete, Delete, Add, Move) are coming in Phase 2-4.*
+
+---
+
+### Search (iOS)
+
+**Find anything fast.**
+
+**Text Search:**
+- Tap **🔍 icon** in toolbar
+- Type in search bar
+- Searches titles and notes
+- Results appear as flat list
+- Tap result to view details
+
+**Saved Searches:**
+- List of SQL searches synced from Mac
+- "Overdue", "Due Today", "This Week", etc.
+- Tap to run and view results
+- **Cannot edit SQL on iOS** - View results only
+- Edit queries on Mac, use on iOS
+
+**Pro tip:** Create useful saved searches on Mac ("Due This Week", "High Priority"), then use them on iPhone for quick reviews.
+
+---
+
+### Settings (iOS)
+
+**Configure sync and appearance.**
+
+**iCloud Sync:**
+- **Sync status** - Synced/Syncing/Error indicator
+- **Last sync** - Timestamp
+- **Sync Now** - Manual sync button
+- **Account name** - Shows active iCloud account
+
+**Appearance:**
+- **Tree Font Size** - Slider for tree text size
+- **Note Font Size** - Slider for note text size
+- (Settings stay per-device, not synced)
+
+**Data:**
+- **Manage Tags** - View tags with colors (Phase 5)
+- **Quick Capture Folder** - Where + button sends items (Phase 2)
+- **Archive Folder** - Where archive feature sends items (Future)
+
+**About:**
+- Version information
+- Help documentation link
+
+---
+
+### Sync Behavior (iOS)
+
+**Same CloudKit sync as Mac - completely automatic.**
+
+**How It Works:**
+- All data syncs via CloudKit private database
+- Changes on iPhone sync to iCloud immediately
+- Changes from Mac appear on iPhone automatically
+- Both devices watch for changes (push notifications)
+- Periodic sync every 5 min as fallback
+
+**Sync States:**
+- ☁️✓ **Green checkmark** - Everything synced
+- ⚙️ **Spinner** - Sync in progress
+- ☁️⚠️ **Red exclamation** - Sync error
+- ☁️/ **Slash icon** - Sync disabled or no iCloud account
+
+**Conflict Resolution:**
+- Same as Mac: **Last-write-wins**
+- Most recent edit (by `modifiedAt` timestamp) wins
+- Simple, predictable, works well for personal use
+
+**What Syncs:**
+- ✓ All items, tags, time entries, dates, notes, hierarchy
+- ✗ Settings (font sizes) - Stay per-device
+- ✗ UI state (expanded folders, selection) - Stay per-device
+
+---
+
+### Offline Mode (iOS)
+
+**Everything works without network.**
+
+DirectGTD for iOS is **offline-first:**
+- Full local database on device
+- All read operations work instantly (no network needed)
+- View tree, expand/collapse, search, view details
+- Changes queue for sync when connectivity returns
+- No "offline mode" - it just works
+
+**When Network Returns:**
+- Queued changes sync automatically
+- Remote changes download automatically
+- Conflict resolution handles simultaneous edits
+- No user action needed
+
+---
+
+### Limitations (iOS)
+
+**What's Mac-only (for now):**
+
+**Not on iOS:**
+- SQL query editing (can view saved search results)
+- Extensive keyboard shortcuts (phone has touch)
+- Drag-and-drop reordering (Phase 4)
+- Time tracking start/stop (can view totals)
+- Deep copy (Cmd+Shift+C) - Mac feature
+- Undo/redo (system undo may come later)
+- Tag Manager with creation/deletion (Phase 5)
+
+**Coming in Future Phases:**
+- Task completion toggle (Phase 2)
+- Quick capture (Phase 2)
+- Item editing (Phase 2)
+- Delete items (Phase 2)
+- Add child items (Phase 4)
+- Move items (Phase 4)
+- Hold-swipe actions (Phase 4)
+- Tag display and editing (Phase 5)
+
+**Mac remains primary:**
+- iOS is a **companion app**, not a replacement
+- Complex workflows stay on desktop
+- Phone excels at capture, review, and completion
+
+---
+
+### iOS Gestures
+
+**Touch interactions optimized for one-handed use.**
+
+**Tap:**
+- Tap **disclosure triangle** - Expand/collapse folder
+- Tap **chevron (›)** - Open detail view
+- Tap **tree row** - Select item (future: quick actions)
+- Tap **+ button** - Open quick capture
+
+**Long-Press:**
+- Long-press **item** - Show context menu
+- Long-press **folder** - Focus option appears
+
+**Swipe:**
+- Swipe **right from left edge** - Navigate back (focus mode)
+- Hold-swipe **left** - Reveal action buttons (Phase 4)
+
+**Pull:**
+- Pull down **at top of tree** - Manual sync (Phase 2)
+
+---
+
+### iOS Tips
+
+**Get the most out of DirectGTD on iPhone:**
+
+1. **Add to Home Screen** - Fastest access for quick capture
+
+2. **Use Quick Capture Liberally** - Capture everything, organize on Mac later
+
+3. **Create Saved Searches on Mac** - "Due Today", "Overdue", "This Week"
+   - Use them on iPhone for daily reviews
+
+4. **Focus Mode for Projects** - Drill into active projects to reduce clutter
+
+5. **Trust Sync** - Everything syncs automatically, just keep working
+
+6. **Offline-First** - Don't worry about connectivity, changes queue and sync later
+
+7. **Mac for Organization** - Use iPhone for capture/completion, Mac for planning/reorganization
+
+---
+
 **Version 2.1** | Made for humans who type faster than they click (but can drag too)
 
 ### What's New in 2.1
