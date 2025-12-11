@@ -848,7 +848,9 @@ class SyncEngine: ObservableObject {
             let result = try await fetchZoneChanges(changeToken: currentToken)
 
             // Apply changes to local database
+            NSLog("SyncEngine: Applying \(result.changedRecords.count) changes and \(result.deletedRecordIDs.count) deletions...")
             try applyRemoteChanges(changedRecords: result.changedRecords, deletedRecordIDs: result.deletedRecordIDs, dbQueue: dbQueue)
+            NSLog("SyncEngine: Apply complete")
 
             totalChanged += result.changedRecords.count
             totalDeleted += result.deletedRecordIDs.count
@@ -874,6 +876,8 @@ class SyncEngine: ObservableObject {
 
     /// Fetch a single batch of zone changes
     private func fetchZoneChanges(changeToken: CKServerChangeToken?) async throws -> ZoneFetchResult {
+        NSLog("SyncEngine: Starting zone fetch (hasToken=\(changeToken != nil))")
+
         let options = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
         options.previousServerChangeToken = changeToken
 
@@ -881,15 +885,18 @@ class SyncEngine: ObservableObject {
             recordZoneIDs: [cloudKitManager.zoneID],
             configurationsByRecordZoneID: [cloudKitManager.zoneID: options]
         )
+        operation.qualityOfService = .userInitiated
 
         return try await withCheckedThrowingContinuation { continuation in
             var fetchResult = ZoneFetchResult()
             var operationError: Error?
+            var recordCount = 0
 
             operation.recordWasChangedBlock = { _, result in
                 switch result {
                 case .success(let record):
                     fetchResult.changedRecords.append(record)
+                    recordCount += 1
                 case .failure(let error):
                     NSLog("SyncEngine: Error fetching record: \(error)")
                 }
@@ -910,6 +917,7 @@ class SyncEngine: ObservableObject {
                 case .success(let (token, _, moreComing)):
                     fetchResult.newChangeToken = token
                     fetchResult.moreComing = moreComing
+                    NSLog("SyncEngine: Zone fetch result - changed=\(fetchResult.changedRecords.count), deleted=\(fetchResult.deletedRecordIDs.count), moreComing=\(moreComing)")
                 case .failure(let error):
                     NSLog("SyncEngine: Zone fetch error: \(error)")
                     operationError = error
@@ -917,6 +925,7 @@ class SyncEngine: ObservableObject {
             }
 
             operation.fetchRecordZoneChangesResultBlock = { result in
+                NSLog("SyncEngine: Fetch operation completed")
                 switch result {
                 case .success:
                     continuation.resume(returning: fetchResult)
@@ -933,89 +942,148 @@ class SyncEngine: ObservableObject {
     private func applyRemoteChanges(changedRecords: [CKRecord],
                                     deletedRecordIDs: [(CKRecord.ID, CKRecord.RecordType)],
                                     dbQueue: DatabaseQueue) throws {
+        // Separate records by type for proper ordering
+        // Order must be: tags -> items -> item_tags -> time_entries -> saved_searches
+        // This ensures foreign key dependencies are satisfied
+        var tagRecords: [CKRecord] = []
+        var itemRecords: [CKRecord] = []
+        var itemTagRecords: [CKRecord] = []
+        var timeEntryRecords: [CKRecord] = []
+        var savedSearchRecords: [CKRecord] = []
+
+        for record in changedRecords {
+            switch record.recordType {
+            case CloudKitManager.RecordType.tag:
+                tagRecords.append(record)
+            case CloudKitManager.RecordType.item:
+                itemRecords.append(record)
+            case CloudKitManager.RecordType.itemTag:
+                itemTagRecords.append(record)
+            case CloudKitManager.RecordType.timeEntry:
+                timeEntryRecords.append(record)
+            case CloudKitManager.RecordType.savedSearch:
+                savedSearchRecords.append(record)
+            default:
+                break
+            }
+        }
+
+        // Sort item records by hierarchy: parents before children
+        let sortedItemRecords = topologicalSortItems(itemRecords)
+
         try dbQueue.write { db in
-            // Apply changed records
-            for record in changedRecords {
-                switch record.recordType {
-                case CloudKitManager.RecordType.item:
-                    if let item = CKRecordConverters.item(from: record) {
-                        // Check for conflict with local changes
-                        if let existingItem = try Item.fetchOne(db, key: item.id),
-                           existingItem.needsPush == 1 {
-                            // Local has unsaved changes - use last-write-wins
-                            if let serverModified = record["modifiedAt"] as? Int,
-                               serverModified > existingItem.modifiedAt {
-                                // Server wins
-                                try item.save(db, onConflict: .replace)
-                            }
-                            // Otherwise local wins - don't overwrite
-                        } else {
-                            // No local conflict, apply server version
-                            try item.save(db, onConflict: .replace)
-                        }
-                    }
+            // Track applied item IDs in-memory to reduce DB lookups
+            var appliedItemIds = Set<String>()
+            var appliedTagIds = Set<String>()
 
-                case CloudKitManager.RecordType.tag:
-                    if let tag = CKRecordConverters.tag(from: record) {
-                        if let existingTag = try Tag.fetchOne(db, key: tag.id),
-                           existingTag.needsPush == 1 {
-                            if let serverModified = record["modifiedAt"] as? Int,
-                               let localModified = existingTag.modifiedAt,
-                               serverModified > localModified {
-                                try tag.save(db, onConflict: .replace)
-                            }
-                        } else {
-                            try tag.save(db, onConflict: .replace)
-                        }
-                    }
-
-                case CloudKitManager.RecordType.itemTag:
-                    if let itemTag = CKRecordConverters.itemTag(from: record) {
-                        // ItemTag uses composite key
-                        let existing = try ItemTag
-                            .filter(Column("item_id") == itemTag.itemId && Column("tag_id") == itemTag.tagId)
-                            .fetchOne(db)
-                        if let existingItemTag = existing, existingItemTag.needsPush == 1 {
-                            if let serverModified = record["modifiedAt"] as? Int,
-                               let localModified = existingItemTag.modifiedAt,
-                               serverModified > localModified {
-                                try itemTag.save(db, onConflict: .replace)
-                            }
-                        } else {
-                            try itemTag.save(db, onConflict: .replace)
-                        }
-                    }
-
-                case CloudKitManager.RecordType.timeEntry:
-                    if let timeEntry = CKRecordConverters.timeEntry(from: record) {
-                        if let existingEntry = try TimeEntry.fetchOne(db, key: timeEntry.id),
-                           existingEntry.needsPush == 1 {
-                            if let serverModified = record["modifiedAt"] as? Int,
-                               let localModified = existingEntry.modifiedAt,
-                               serverModified > localModified {
-                                try timeEntry.save(db, onConflict: .replace)
-                            }
-                        } else {
-                            try timeEntry.save(db, onConflict: .replace)
-                        }
-                    }
-
-                case CloudKitManager.RecordType.savedSearch:
-                    if let savedSearch = CKRecordConverters.savedSearch(from: record) {
-                        if let existingSearch = try SavedSearch.fetchOne(db, key: savedSearch.id),
-                           existingSearch.needsPush == 1 {
-                            if let serverModified = record["modifiedAt"] as? Int,
-                               serverModified > existingSearch.modifiedAt {
-                                try savedSearch.save(db, onConflict: .replace)
-                            }
-                        } else {
-                            try savedSearch.save(db, onConflict: .replace)
-                        }
-                    }
-
-                default:
-                    NSLog("SyncEngine: Unknown record type: \(record.recordType)")
+            // Helper to check if item exists (in-memory or DB)
+            func itemExists(_ id: String) throws -> Bool {
+                if appliedItemIds.contains(id) { return true }
+                if try Item.fetchOne(db, key: id) != nil {
+                    appliedItemIds.insert(id)
+                    return true
                 }
+                return false
+            }
+
+            // Helper to check if tag exists (in-memory or DB)
+            func tagExists(_ id: String) throws -> Bool {
+                if appliedTagIds.contains(id) { return true }
+                if try Tag.fetchOne(db, key: id) != nil {
+                    appliedTagIds.insert(id)
+                    return true
+                }
+                return false
+            }
+
+            // 1. Tags first (no dependencies)
+            for record in tagRecords {
+                try applyChangedRecord(record, to: db)
+                if let tag = CKRecordConverters.tag(from: record) {
+                    appliedTagIds.insert(tag.id)
+                }
+            }
+
+            // 2. Items with multi-pass retry for deep chains
+            var pendingItems = sortedItemRecords
+            let maxRetryPasses = 3
+            var pass = 0
+
+            while !pendingItems.isEmpty && pass < maxRetryPasses {
+                pass += 1
+                var stillPending: [CKRecord] = []
+
+                for record in pendingItems {
+                    if let item = CKRecordConverters.item(from: record),
+                       let parentId = item.parentId, !parentId.isEmpty {
+                        if try !itemExists(parentId) {
+                            if pass < maxRetryPasses {
+                                NSLog("SyncEngine: Deferring item \(item.id) - parent \(parentId) not ready (pass \(pass))")
+                                stillPending.append(record)
+                                continue
+                            } else {
+                                NSLog("SyncEngine: Skipping item \(item.id) - parent \(parentId) still missing after \(maxRetryPasses) passes")
+                                continue
+                            }
+                        }
+                    }
+                    try applyChangedRecord(record, to: db)
+                    if let item = CKRecordConverters.item(from: record) {
+                        appliedItemIds.insert(item.id)
+                    }
+                }
+
+                pendingItems = stillPending
+            }
+
+            // Log any unresolved items
+            for record in pendingItems {
+                if let item = CKRecordConverters.item(from: record) {
+                    NSLog("SyncEngine: Unresolved item \(item.id) after all retry passes - parent chain incomplete")
+                }
+            }
+
+            // 3. ItemTags with retry
+            var pendingItemTags = itemTagRecords
+            var retriedItemTags: [CKRecord] = []
+
+            for record in pendingItemTags {
+                if try !applyItemTagIfReady(record, to: db, itemExists: itemExists, tagExists: tagExists) {
+                    retriedItemTags.append(record)
+                }
+            }
+
+            // Retry once after items are applied
+            for record in retriedItemTags {
+                if try !applyItemTagIfReady(record, to: db, itemExists: itemExists, tagExists: tagExists) {
+                    if let itemTag = CKRecordConverters.itemTag(from: record) {
+                        NSLog("SyncEngine: Unresolved item_tag (item=\(itemTag.itemId), tag=\(itemTag.tagId)) after retry")
+                    }
+                }
+            }
+
+            // 4. TimeEntries with retry
+            var pendingTimeEntries = timeEntryRecords
+            var retriedTimeEntries: [CKRecord] = []
+
+            for record in pendingTimeEntries {
+                if try !applyTimeEntryIfReady(record, to: db, itemExists: itemExists) {
+                    retriedTimeEntries.append(record)
+                }
+            }
+
+            // Retry once
+            for record in retriedTimeEntries {
+                if try !applyTimeEntryIfReady(record, to: db, itemExists: itemExists) {
+                    if let timeEntry = CKRecordConverters.timeEntry(from: record) {
+                        NSLog("SyncEngine: Unresolved time_entry (id=\(timeEntry.id), item=\(timeEntry.itemId)) after retry")
+                    }
+                }
+            }
+
+            // 5. SavedSearches (no dependencies)
+            for record in savedSearchRecords {
+                try applyChangedRecord(record, to: db)
             }
 
             // Apply deletions
@@ -1060,6 +1128,224 @@ class SyncEngine: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Topologically sort item records so parents come before children.
+    /// Uses CKRecordConverters to extract IDs consistently with the rest of the sync logic.
+    /// Preserves original order where hierarchy doesn't dictate otherwise.
+    private func topologicalSortItems(_ records: [CKRecord]) -> [CKRecord] {
+        // Build mappings: convert once, reuse everywhere
+        var originalIndex: [String: Int] = [:]       // itemId -> original index
+        var recordByItemId: [String: CKRecord] = [:]
+        var itemIdByRecordName: [String: String] = [:] // recordName -> itemId
+        var itemById: [String: Item] = [:]
+        var failedRecords: [CKRecord] = []
+
+        for (index, record) in records.enumerated() {
+            if let item = CKRecordConverters.item(from: record) {
+                originalIndex[item.id] = index
+                recordByItemId[item.id] = record
+                itemIdByRecordName[record.recordID.recordName] = item.id
+                itemById[item.id] = item
+            } else {
+                NSLog("SyncEngine: topologicalSort - failed to convert record: \(record.recordID.recordName)")
+                failedRecords.append(record)
+            }
+        }
+
+        // Build parent-child relationships in original order
+        var childrenOf: [String: [String]] = [:]  // parentId -> [childIds]
+        var rootIds: [String] = []
+        var rootIdSet = Set<String>()
+
+        for record in records {
+            guard let itemId = itemIdByRecordName[record.recordID.recordName],
+                  let item = itemById[itemId] else {
+                continue
+            }
+
+            if let parentId = item.parentId, !parentId.isEmpty {
+                childrenOf[parentId, default: []].append(item.id)
+                // If parent not in this batch, treat as root
+                if itemById[parentId] == nil && !rootIdSet.contains(item.id) {
+                    rootIds.append(item.id)
+                    rootIdSet.insert(item.id)
+                }
+            } else {
+                if !rootIdSet.contains(item.id) {
+                    rootIds.append(item.id)
+                    rootIdSet.insert(item.id)
+                }
+            }
+        }
+
+        // BFS from roots to build sorted order
+        var sorted: [CKRecord] = []
+        var queue = rootIds
+        var visited = Set<String>()
+
+        while !queue.isEmpty {
+            let id = queue.removeFirst()
+            guard !visited.contains(id) else { continue }
+            visited.insert(id)
+
+            if let record = recordByItemId[id] {
+                sorted.append(record)
+            }
+
+            // Enqueue children sorted by original order, skip already visited (duplicate ID safety)
+            if let children = childrenOf[id] {
+                let sortedChildren = children.sorted { a, b in
+                    (originalIndex[a] ?? Int.max) < (originalIndex[b] ?? Int.max)
+                }
+                for childId in sortedChildren {
+                    if !visited.contains(childId) {
+                        queue.append(childId)
+                    }
+                }
+            }
+        }
+
+        // Fallback: append any items that weren't reached, preserving original order
+        // This can happen with cycles or if parent references form a loop
+        for record in records {
+            if let itemId = itemIdByRecordName[record.recordID.recordName],
+               !visited.contains(itemId) {
+                sorted.append(record)
+                let item = itemById[itemId]
+                let parentId = item?.parentId ?? "nil"
+                NSLog("SyncEngine: topologicalSort - appending unreached item \(itemId) (parentId=\(parentId)) - possible cycle or missing parent chain")
+            }
+        }
+
+        // Append records that failed conversion (preserve original order)
+        sorted.append(contentsOf: failedRecords)
+
+        return sorted
+    }
+
+    /// Apply a single changed record to the database
+    private func applyChangedRecord(_ record: CKRecord, to db: GRDB.Database) throws {
+        switch record.recordType {
+        case CloudKitManager.RecordType.item:
+            if let item = CKRecordConverters.item(from: record) {
+                // Check for conflict with local changes
+                if let existingItem = try Item.fetchOne(db, key: item.id),
+                   existingItem.needsPush == 1 {
+                    // Local has unsaved changes - use last-write-wins
+                    if let serverModified = record["modifiedAt"] as? Int,
+                       serverModified > existingItem.modifiedAt {
+                        // Server wins
+                        try item.save(db, onConflict: .replace)
+                    }
+                    // Otherwise local wins - don't overwrite
+                } else {
+                    // No local conflict, apply server version
+                    try item.save(db, onConflict: .replace)
+                }
+            } else {
+                NSLog("SyncEngine: Failed to convert item record: \(record.recordID.recordName), keys: \(record.allKeys())")
+            }
+
+        case CloudKitManager.RecordType.tag:
+            if let tag = CKRecordConverters.tag(from: record) {
+                if let existingTag = try Tag.fetchOne(db, key: tag.id),
+                   existingTag.needsPush == 1 {
+                    if let serverModified = record["modifiedAt"] as? Int,
+                       let localModified = existingTag.modifiedAt,
+                       serverModified > localModified {
+                        try tag.save(db, onConflict: .replace)
+                    }
+                } else {
+                    try tag.save(db, onConflict: .replace)
+                }
+            }
+
+        case CloudKitManager.RecordType.itemTag:
+            if let itemTag = CKRecordConverters.itemTag(from: record) {
+                // ItemTag uses composite key
+                let existing = try ItemTag
+                    .filter(Column("item_id") == itemTag.itemId && Column("tag_id") == itemTag.tagId)
+                    .fetchOne(db)
+                if let existingItemTag = existing, existingItemTag.needsPush == 1 {
+                    if let serverModified = record["modifiedAt"] as? Int,
+                       let localModified = existingItemTag.modifiedAt,
+                       serverModified > localModified {
+                        try itemTag.save(db, onConflict: .replace)
+                    }
+                } else {
+                    try itemTag.save(db, onConflict: .replace)
+                }
+            }
+
+        case CloudKitManager.RecordType.timeEntry:
+            if let timeEntry = CKRecordConverters.timeEntry(from: record) {
+                if let existingEntry = try TimeEntry.fetchOne(db, key: timeEntry.id),
+                   existingEntry.needsPush == 1 {
+                    if let serverModified = record["modifiedAt"] as? Int,
+                       let localModified = existingEntry.modifiedAt,
+                       serverModified > localModified {
+                        try timeEntry.save(db, onConflict: .replace)
+                    }
+                } else {
+                    try timeEntry.save(db, onConflict: .replace)
+                }
+            }
+
+        case CloudKitManager.RecordType.savedSearch:
+            if let savedSearch = CKRecordConverters.savedSearch(from: record) {
+                if let existingSearch = try SavedSearch.fetchOne(db, key: savedSearch.id),
+                   existingSearch.needsPush == 1 {
+                    if let serverModified = record["modifiedAt"] as? Int,
+                       serverModified > existingSearch.modifiedAt {
+                        try savedSearch.save(db, onConflict: .replace)
+                    }
+                } else {
+                    try savedSearch.save(db, onConflict: .replace)
+                }
+            }
+
+        default:
+            NSLog("SyncEngine: Unknown record type: \(record.recordType)")
+        }
+    }
+
+    /// Apply an itemTag record if its dependencies exist. Returns true if applied, false if deferred.
+    private func applyItemTagIfReady(_ record: CKRecord, to db: GRDB.Database,
+                                      itemExists: (String) throws -> Bool,
+                                      tagExists: (String) throws -> Bool) throws -> Bool {
+        guard let itemTag = CKRecordConverters.itemTag(from: record) else {
+            NSLog("SyncEngine: Failed to convert item_tag record: \(record.recordID.recordName)")
+            return true  // Don't retry conversion failures
+        }
+
+        let hasItem = try itemExists(itemTag.itemId)
+        let hasTag = try tagExists(itemTag.tagId)
+
+        guard hasItem && hasTag else {
+            NSLog("SyncEngine: Deferring item_tag (item=\(itemTag.itemId), tag=\(itemTag.tagId)) - itemExists=\(hasItem), tagExists=\(hasTag)")
+            return false
+        }
+
+        try applyChangedRecord(record, to: db)
+        return true
+    }
+
+    /// Apply a timeEntry record if its item dependency exists. Returns true if applied, false if deferred.
+    private func applyTimeEntryIfReady(_ record: CKRecord, to db: GRDB.Database,
+                                        itemExists: (String) throws -> Bool) throws -> Bool {
+        guard let timeEntry = CKRecordConverters.timeEntry(from: record) else {
+            NSLog("SyncEngine: Failed to convert time_entry record: \(record.recordID.recordName)")
+            return true  // Don't retry conversion failures
+        }
+
+        guard try itemExists(timeEntry.itemId) else {
+            NSLog("SyncEngine: Deferring time_entry (id=\(timeEntry.id)) - item \(timeEntry.itemId) missing")
+            return false
+        }
+
+        try applyChangedRecord(record, to: db)
+        return true
     }
 
     // MARK: - Conflict Resolution

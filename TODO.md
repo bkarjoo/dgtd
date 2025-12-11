@@ -171,3 +171,11 @@ ORDER BY created_at DESC
 - Query timeout: 250ms
 - No multiple statements, no ATTACH, no PRAGMA writes
 - Use `strftime('%s', 'now')` for current time (no bound parameters needed)
+
+## Siri Integration
+
+- Add tasks via Siri voice commands
+  - Add Siri Intents Extension target
+  - Enable Siri capability in the app
+  - Implement `INAddTasksIntentHandling` protocol
+  - Allow users to say "Hey Siri, add [task] to DirectGTD"
