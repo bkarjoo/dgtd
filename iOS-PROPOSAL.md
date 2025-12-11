@@ -12,6 +12,12 @@ A native iPhone companion app for DirectGTD that syncs with the macOS app via Cl
 - **Deliberate actions**: No accidental swipes - hold-swipe reveals action buttons
 - **Bare essentials**: Core functionality only, complexity stays on desktop
 
+## Implementation Constraints
+
+**DO NOT USE:**
+- `NavigationStack` - breaks the custom header bar and focus mode behavior
+- `.searchable` modifier - causes unwanted UI changes to the navigation bar
+
 ---
 
 ## Navigation Architecture
@@ -144,21 +150,34 @@ Accessed by tapping the chevron on any row:
 
 ---
 
-## Search Tab
+## Search
 
-### Quick Search
+### Search UX Flow
 
-- Search bar at top
-- Searches title and notes
-- Results appear as flat list
-- Tap result to view detail
+1. **Tap magnifying glass** → keyboard + search bar appear at bottom, header bar hides, tree remains visible (gains header space)
+2. **User types something** → search results overlay appears above keyboard/search bar, covering the tree
+3. **User clears text OR dismisses keyboard** → search results disappear, tree shows again
+4. **Tap a result** → dismisses search, jumps to item in tree AND focuses on it
+5. **Header bar** → hidden while in search mode, returns when exiting search
 
-### Saved Searches
+### Search Behavior
 
-- List of saved SQL searches from Mac
+- Search results overlay only appears when: (a) keyboard is open AND (b) search text is non-empty
+- Tree is always visible "behind" the overlay when no search text
+- Searches title and notes (in-memory filtering of loaded items)
+- Results appear as flat list with breadcrumb paths
+
+---
+
+## Saved Searches (SQL Power Queries) - Future
+
+This is a separate feature from text search. On macOS, this is currently assigned to the magnifying glass toolbar button (SQL query builder). Not to be confused with Cmd+F style text search.
+
+- List of saved SQL searches synced from Mac
 - "Due Today", "Overdue", "This Week" can be saved searches
 - Tap to run and see results
 - Cannot edit SQL on iOS (view results only)
+- **Not part of the current text search implementation**
 
 ---
 

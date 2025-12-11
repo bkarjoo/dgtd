@@ -9,71 +9,39 @@ import SwiftUI
 import DirectGTDCore
 
 struct SearchView: View {
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var viewModel: TreeViewModel
-    @State private var searchText = ""
-    @State private var hasTypedSearchText = false
-    @FocusState private var isSearchFocused: Bool
+    let searchText: String
+    let onSelect: () -> Void
 
     /// Filter viewModel.items by search text (same approach as macOS ItemStore)
     private var searchResults: [Item] {
-        guard !searchText.isEmpty else { return [] }
-        return viewModel.items.filter { item in
+        viewModel.items.filter { item in
             (item.title ?? "").localizedCaseInsensitiveContains(searchText) ||
             (item.notes ?? "").localizedCaseInsensitiveContains(searchText)
         }
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                if searchText.isEmpty {
-                    ContentUnavailableView(
-                        "Search Items",
-                        systemImage: "magnifyingglass",
-                        description: Text("Type to search titles and notes")
-                    )
-                } else if searchResults.isEmpty {
-                    ContentUnavailableView(
-                        "No Results",
-                        systemImage: "magnifyingglass",
-                        description: Text("No items match \"\(searchText)\"")
-                    )
-                } else {
-                    ForEach(searchResults, id: \.id) { item in
-                        SearchResultRow(item: item, viewModel: viewModel)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                selectAndJumpToItem(item)
-                            }
-                    }
-                }
-            }
-            .navigationTitle("Search")
-            .searchable(text: $searchText, prompt: "Search items...")
-            .searchFocused($isSearchFocused)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-            .task {
-                isSearchFocused = true
-            }
-            .onChange(of: searchText) { _, newValue in
-                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmed.isEmpty {
-                    if hasTypedSearchText {
-                        hasTypedSearchText = false
-                        dismiss()
-                    }
-                } else {
-                    hasTypedSearchText = true
+        List {
+            if searchResults.isEmpty {
+                ContentUnavailableView(
+                    "No Results",
+                    systemImage: "magnifyingglass",
+                    description: Text("No items match \"\(searchText)\"")
+                )
+            } else {
+                ForEach(searchResults, id: \.id) { item in
+                    SearchResultRow(item: item, viewModel: viewModel)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectAndJumpToItem(item)
+                            onSelect()
+                        }
                 }
             }
         }
+        .listStyle(.plain)
+        .background(Color(.systemBackground))
     }
 
     private func selectAndJumpToItem(_ item: Item) {
@@ -85,9 +53,6 @@ struct SearchView: View {
 
         // Select the item
         viewModel.selectedItemId = item.id
-
-        // Close search
-        dismiss()
     }
 
     private func expandAncestors(of item: Item) {
@@ -187,5 +152,6 @@ struct SearchResultRow: View {
 }
 
 #Preview {
-    SearchView()
+    SearchView(searchText: "Sample") {}
+        .environmentObject(TreeViewModel())
 }
