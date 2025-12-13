@@ -497,12 +497,16 @@ struct ItemRow: View {
             HStack(spacing: 4) {
                 // Fixed-width chevron area
                 Button(action: {
-                    if !children.isEmpty {
+                    // Don't toggle if this is the focused item (always expanded)
+                    if !children.isEmpty && store.focusedItemId != item.id {
                         isExpanded.wrappedValue.toggle()
                     }
                 }) {
                     if !children.isEmpty {
-                        Image(systemName: isExpanded.wrappedValue ? "chevron.down" : "chevron.right")
+                        // Focused item always shows expanded chevron
+                        let isFocusedItem = store.focusedItemId == item.id
+                        let showExpanded = isFocusedItem || isExpanded.wrappedValue
+                        Image(systemName: showExpanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: fontSize * 0.8))
                             .frame(width: fontSize, height: fontSize)
                             .contentShape(Rectangle())
@@ -640,6 +644,9 @@ struct ItemRow: View {
             .onTapGesture {
                 DispatchQueue.main.async {
                     store.selectedItemId = item.id
+                    store.focusedItemId = item.id
+                    // Focused items are always expanded
+                    settings.expandedItemIds.insert(item.id)
                 }
             }
             .onDrag {

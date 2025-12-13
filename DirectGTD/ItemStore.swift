@@ -931,12 +931,47 @@ class ItemStore: ObservableObject {
 
     func expandSelectedItem() {
         guard let selectedId = selectedItemId else { return }
-        settings.expandedItemIds.insert(selectedId)
+        let hasChildren = items.contains { $0.parentId == selectedId }
+
+        // If already expanded, focus the item
+        if settings.expandedItemIds.contains(selectedId) {
+            focusedItemId = selectedId
+        } else {
+            settings.expandedItemIds.insert(selectedId)
+            // If no children, immediately focus
+            if !hasChildren {
+                focusedItemId = selectedId
+            }
+        }
     }
 
     func collapseSelectedItem() {
         guard let selectedId = selectedItemId else { return }
-        settings.expandedItemIds.remove(selectedId)
+        let hasChildren = items.contains { $0.parentId == selectedId }
+
+        // If this is the focused item, go to parent (unfocus)
+        if focusedItemId == selectedId {
+            goToParent()
+            return
+        }
+
+        // If expanded, collapse it
+        if settings.expandedItemIds.contains(selectedId) {
+            settings.expandedItemIds.remove(selectedId)
+            // If no children, immediately select parent
+            if !hasChildren {
+                if let item = items.first(where: { $0.id == selectedId }),
+                   let parentId = item.parentId {
+                    selectedItemId = parentId
+                }
+            }
+        } else {
+            // If already collapsed, select parent
+            if let item = items.first(where: { $0.id == selectedId }),
+               let parentId = item.parentId {
+                selectedItemId = parentId
+            }
+        }
     }
 
     func deleteSelectedItem() {
@@ -1065,6 +1100,34 @@ class ItemStore: ObservableObject {
 
         // Recursively check if parent is visible
         return isItemVisible(itemId: parentId)
+    }
+
+    // MARK: - Focus Navigation
+
+    /// Whether the tree is currently in focus mode
+    var isFocused: Bool {
+        focusedItemId != nil
+    }
+
+    /// The title of the parent of the focused item (for back button display)
+    var focusedItemParentTitle: String? {
+        guard let focusedId = focusedItemId,
+              let focusedItem = items.first(where: { $0.id == focusedId }),
+              let parentId = focusedItem.parentId,
+              let parent = items.first(where: { $0.id == parentId }) else {
+            return nil
+        }
+        return parent.title
+    }
+
+    /// Navigate to parent of focused item (or back to root)
+    func goToParent() {
+        guard let focusedId = focusedItemId,
+              let focusedItem = items.first(where: { $0.id == focusedId }) else {
+            focusedItemId = nil
+            return
+        }
+        focusedItemId = focusedItem.parentId
     }
 
     private func isInFocusSubtree(itemId: String) -> Bool {

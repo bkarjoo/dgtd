@@ -33,6 +33,19 @@ struct ContentView: View {
         VStack(spacing: 0) {
             // Toolbar
             HStack {
+                // Back button (only when focused)
+                if store.isFocused {
+                    Button {
+                        store.goToParent()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding()
+                }
+
                 Button(action: { showingSettings = true }) {
                     Image(systemName: "gear")
                 }
