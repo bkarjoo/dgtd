@@ -1353,10 +1353,25 @@ class SyncEngine: ObservableObject {
     /// Handle conflicts using last-write-wins.
     /// When local wins, updates ck_change_tag and ck_system_fields from server so next push can succeed.
     private func handleConflicts(_ conflicts: [(CKRecord.ID, CKError)], dbQueue: DatabaseQueue) throws {
+        NSLog("SyncEngine: Handling \(conflicts.count) conflicts")
         for (recordID, error) in conflicts {
-            guard let serverRecord = error.serverRecord else { continue }
-
             let recordName = recordID.recordName
+
+            guard let serverRecord = error.serverRecord else {
+                // No server record available - clear change tag and mark for retry
+                // This forces a fresh push that will either succeed or get the server record next time
+                NSLog("SyncEngine: Conflict for \(recordName) has no serverRecord - clearing change tag for retry")
+                try dbQueue.write { db in
+                    // Try all tables since we don't know the record type without serverRecord
+                    try db.execute(sql: "UPDATE items SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE tags SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE item_tags SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE time_entries SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE saved_searches SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                }
+                continue
+            }
+
             let serverChangeTag = serverRecord.recordChangeTag
             // Encode server's system fields so we can use them for the retry push
             let serverSystemFields = CKRecordConverters.encodeSystemFields(serverRecord)
@@ -1368,12 +1383,12 @@ class SyncEngine: ObservableObject {
                 case CloudKitManager.RecordType.item:
                     if let localItem = try Item.filter(Column("ck_record_name") == recordName).fetchOne(db) {
                         if localItem.modifiedAt > serverModifiedAt {
-                            // Local wins - update change tag and system fields so next push succeeds
+                            // Local wins - update change tag/system fields AND mark for retry
                             try db.execute(
-                                sql: "UPDATE items SET ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                                sql: "UPDATE items SET ck_change_tag = ?, ck_system_fields = ?, needs_push = 1 WHERE ck_record_name = ?",
                                 arguments: [serverChangeTag, serverSystemFields, recordName]
                             )
-                            NSLog("SyncEngine: Conflict - local item wins, updated system fields for retry")
+                            NSLog("SyncEngine: Conflict - local item wins, marked for retry push")
                         } else {
                             // Server wins - apply server version
                             if let item = CKRecordConverters.item(from: serverRecord) {
@@ -1387,12 +1402,12 @@ class SyncEngine: ObservableObject {
                     if let localTag = try Tag.filter(Column("ck_record_name") == recordName).fetchOne(db),
                        let localModified = localTag.modifiedAt {
                         if localModified > serverModifiedAt {
-                            // Local wins - update change tag and system fields so next push succeeds
+                            // Local wins - update change tag/system fields AND mark for retry
                             try db.execute(
-                                sql: "UPDATE tags SET ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                                sql: "UPDATE tags SET ck_change_tag = ?, ck_system_fields = ?, needs_push = 1 WHERE ck_record_name = ?",
                                 arguments: [serverChangeTag, serverSystemFields, recordName]
                             )
-                            NSLog("SyncEngine: Conflict - local tag wins, updated system fields for retry")
+                            NSLog("SyncEngine: Conflict - local tag wins, marked for retry push")
                         } else {
                             // Server wins
                             if let tag = CKRecordConverters.tag(from: serverRecord) {
@@ -1406,12 +1421,12 @@ class SyncEngine: ObservableObject {
                     if let localItemTag = try ItemTag.filter(Column("ck_record_name") == recordName).fetchOne(db),
                        let localModified = localItemTag.modifiedAt {
                         if localModified > serverModifiedAt {
-                            // Local wins
+                            // Local wins - mark for retry
                             try db.execute(
-                                sql: "UPDATE item_tags SET ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                                sql: "UPDATE item_tags SET ck_change_tag = ?, ck_system_fields = ?, needs_push = 1 WHERE ck_record_name = ?",
                                 arguments: [serverChangeTag, serverSystemFields, recordName]
                             )
-                            NSLog("SyncEngine: Conflict - local itemTag wins, updated system fields for retry")
+                            NSLog("SyncEngine: Conflict - local itemTag wins, marked for retry push")
                         } else {
                             // Server wins
                             if let itemTag = CKRecordConverters.itemTag(from: serverRecord) {
@@ -1425,12 +1440,12 @@ class SyncEngine: ObservableObject {
                     if let localTimeEntry = try TimeEntry.filter(Column("ck_record_name") == recordName).fetchOne(db),
                        let localModified = localTimeEntry.modifiedAt {
                         if localModified > serverModifiedAt {
-                            // Local wins
+                            // Local wins - mark for retry
                             try db.execute(
-                                sql: "UPDATE time_entries SET ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                                sql: "UPDATE time_entries SET ck_change_tag = ?, ck_system_fields = ?, needs_push = 1 WHERE ck_record_name = ?",
                                 arguments: [serverChangeTag, serverSystemFields, recordName]
                             )
-                            NSLog("SyncEngine: Conflict - local timeEntry wins, updated system fields for retry")
+                            NSLog("SyncEngine: Conflict - local timeEntry wins, marked for retry push")
                         } else {
                             // Server wins
                             if let timeEntry = CKRecordConverters.timeEntry(from: serverRecord) {
@@ -1443,12 +1458,12 @@ class SyncEngine: ObservableObject {
                 case CloudKitManager.RecordType.savedSearch:
                     if let localSearch = try SavedSearch.filter(Column("ck_record_name") == recordName).fetchOne(db) {
                         if localSearch.modifiedAt > serverModifiedAt {
-                            // Local wins
+                            // Local wins - mark for retry
                             try db.execute(
-                                sql: "UPDATE saved_searches SET ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
+                                sql: "UPDATE saved_searches SET ck_change_tag = ?, ck_system_fields = ?, needs_push = 1 WHERE ck_record_name = ?",
                                 arguments: [serverChangeTag, serverSystemFields, recordName]
                             )
-                            NSLog("SyncEngine: Conflict - local savedSearch wins, updated system fields for retry")
+                            NSLog("SyncEngine: Conflict - local savedSearch wins, marked for retry push")
                         } else {
                             // Server wins
                             if let savedSearch = CKRecordConverters.savedSearch(from: serverRecord) {
