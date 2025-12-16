@@ -91,7 +91,7 @@ final class APIServerTests: XCTestCase {
         let body = ["title": "Test Item"]
         let (status, response) = try await makeRequest(method: "POST", path: "/items", body: body)
 
-        print("DEBUG testCreateItem: status=\(status), response=\(response)")
+        NSLog("DEBUG testCreateItem: status=\(status), response=\(response)")
 
         XCTAssertEqual(status, 200, "Expected status 200, got \(status). Response: \(response)")
 
