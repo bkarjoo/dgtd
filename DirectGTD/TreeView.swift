@@ -33,8 +33,7 @@ struct TreeView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: settings.lineSpacing) {
                             ForEach(rootItems, id: \.id) { item in
-                                ItemRow(item: item, allItems: store.items, store: store, settings: settings, editFieldFocused: $editFieldFocused, fontSize: settings.fontSize, onCompletionToggled: { updateSelectionIfInvalid() })
-                                    .id(item.id)
+                                renderItemAndChildren(item: item, depth: 0)
                             }
                         }
                         .padding(.horizontal, settings.horizontalMargin)
@@ -325,6 +324,179 @@ struct TreeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    // MARK: - Phase 3 Adapter Layer
+
+    private func computeChildren(for item: Item) -> [Item] {
+        store.items
+            .filter { $0.parentId == item.id }
+            .filter { child in
+                // Filter by SQL search if active (takes precedence)
+                if store.sqlSearchActive {
+                    return store.matchesSQLSearch(child)
+                }
+
+                // Filter by tag if active (takes precedence over completed check)
+                if store.filteredByTag != nil {
+                    return store.matchesTagFilter(child)
+                }
+
+                // Hide completed tasks if showCompletedTasks is false
+                if !settings.showCompletedTasks && child.itemType == .task && child.completedAt != nil {
+                    return false
+                }
+
+                return true
+            }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    private func makeRowProps(for item: Item) -> RowProps {
+        let children = computeChildren(for: item)
+        let isDropTarget = store.dropTargetId == item.id
+        return RowProps(
+            item: item,
+            isSelected: store.selectedItemId == item.id,
+            isExpanded: settings.expandedItemIds.contains(item.id),
+            isFocusedItem: store.focusedItemId == item.id,
+            fontSize: settings.fontSize,
+            children: children,
+            childCount: children.count,
+            tagCount: store.getTagsForItem(itemId: item.id).count,
+            isDropTargetInto: isDropTarget && store.dropTargetPosition == .into,
+            isDropTargetAbove: isDropTarget && store.dropTargetPosition == .above,
+            isDropTargetBelow: isDropTarget && store.dropTargetPosition == .below
+        )
+    }
+
+    /// Phase 8: Recursively render item and its children from TreeView
+    private func renderItemAndChildren(item: Item, depth: Int) -> AnyView {
+        let props = makeRowProps(for: item)
+        let callbacks = makeRowCallbacks()
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: 0) {
+                ItemRowView(
+                    item: item,
+                    store: store,
+                    editFieldFocused: $editFieldFocused,
+                    fontSize: settings.fontSize,
+                    rowProps: props,
+                    callbacks: callbacks
+                )
+                .id(item.id)
+
+                // Render children if expanded (or focused item)
+                if props.childCount > 0 && (props.isExpanded || props.isFocusedItem) {
+                    VStack(alignment: .leading, spacing: settings.lineSpacing) {
+                        ForEach(props.children, id: \.id) { child in
+                            renderItemAndChildren(item: child, depth: depth + 1)
+                                .padding(.leading, 20)
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    private func makeRowCallbacks() -> ItemRowCallbacks {
+        // Phase 4-5-6-7: Centralized tap, chevron, completion, and DnD handling
+        ItemRowCallbacks(
+            onTap: { [self] itemId in
+                DispatchQueue.main.async {
+                    // Set keyboard focus to TreeView
+                    isFocused = true
+
+                    if store.selectedItemId == itemId {
+                        // Already selected: focus and expand
+                        store.focusedItemId = itemId
+                        settings.expandedItemIds.insert(itemId)
+                    } else {
+                        // Not selected: select only
+                        store.selectedItemId = itemId
+                    }
+                }
+            },
+            onChevronTap: { [self] itemId in
+                let children = computeChildren(for: store.items.first { $0.id == itemId } ?? Item(id: itemId, title: ""))
+                let result = TreeViewInteraction.toggleExpansion(
+                    itemId: itemId,
+                    isFocusedItem: store.focusedItemId == itemId,
+                    hasChildren: !children.isEmpty,
+                    selectedId: store.selectedItemId,
+                    expanded: settings.expandedItemIds,
+                    isDescendant: { childId, parentId in
+                        isDescendantOf(childId: childId, parentId: parentId)
+                    }
+                )
+                settings.expandedItemIds = result.expanded
+                if let newSelectedId = result.selectedId, newSelectedId != store.selectedItemId {
+                    store.selectedItemId = newSelectedId
+                }
+            },
+            onToggleComplete: { [self] itemId in
+                // Look up item to check if it's a task
+                guard let item = store.items.first(where: { $0.id == itemId }),
+                      item.itemType == .task else { return }
+
+                DispatchQueue.main.async {
+                    // Toggle completion
+                    store.toggleTaskCompletion(id: itemId)
+
+                    // Update selection if the item became hidden due to filters
+                    updateSelectionIfInvalid()
+                }
+            },
+            // Phase 7: Drag-and-drop callbacks
+            onDragStart: { [store] itemId in
+                store.draggedItemId = itemId
+            },
+            onDropValidate: { [store] draggedId, targetId, position in
+                store.canDropItem(draggedItemId: draggedId, onto: targetId, position: position)
+            },
+            onDropPerform: { [store] draggedId, targetId, position in
+                DispatchQueue.main.async {
+                    store.moveItem(draggedItemId: draggedId, targetItemId: targetId, position: position)
+                    store.selectedItemId = draggedId
+                    // Clear drop indicators
+                    store.draggedItemId = nil
+                    store.dropTargetId = nil
+                    store.dropTargetPosition = nil
+                }
+            },
+            onDropUpdated: { [store] targetId, position in
+                store.dropTargetId = targetId
+                store.dropTargetPosition = position
+            },
+            onDropExited: { [store] targetId in
+                if store.dropTargetId == targetId {
+                    store.dropTargetId = nil
+                    store.dropTargetPosition = nil
+                }
+            },
+            onDragEnd: { [store] in
+                store.draggedItemId = nil
+                store.dropTargetId = nil
+                store.dropTargetPosition = nil
+            }
+        )
+    }
+
+    /// Check if childId is a descendant of parentId
+    private func isDescendantOf(childId: String, parentId: String) -> Bool {
+        if childId == parentId { return false }
+        guard let child = store.items.first(where: { $0.id == childId }) else { return false }
+
+        var current = child
+        while let pid = current.parentId {
+            if pid == parentId { return true }
+            guard let parent = store.items.first(where: { $0.id == pid }) else { break }
+            current = parent
+        }
+        return false
+    }
+
+    // MARK: - Computed Properties
+
     private var rootItems: [Item] {
         // In focus mode, the focused item is the only root
         if let focusedId = store.focusedItemId,
@@ -447,303 +619,6 @@ struct TreeView: View {
     }
 }
 
-struct ItemRow: View {
-    let item: Item
-    let allItems: [Item]
-    @ObservedObject var store: ItemStore
-    @ObservedObject var settings: UserSettings
-    @FocusState.Binding var editFieldFocused: Bool
-    let fontSize: CGFloat
-    let onCompletionToggled: () -> Void
-    @State private var editText: String = ""
-    @State private var rowHeight: CGFloat = 0
-
-    private var isExpanded: Binding<Bool> {
-        Binding(
-            get: { settings.expandedItemIds.contains(item.id) },
-            set: { newValue in
-                if newValue {
-                    settings.expandedItemIds.insert(item.id)
-                } else {
-                    // Collapsing: check if any descendant is selected
-                    if hasSelectedDescendant(item: item) {
-                        store.selectedItemId = item.id
-                    }
-                    settings.expandedItemIds.remove(item.id)
-                }
-            }
-        )
-    }
-
-    private func hasSelectedDescendant(item: Item) -> Bool {
-        guard let selectedId = store.selectedItemId else { return false }
-        return isDescendant(of: item, itemId: selectedId, in: allItems)
-    }
-
-    private func isDescendant(of parent: Item, itemId: String, in items: [Item]) -> Bool {
-        if itemId == parent.id { return false }
-
-        guard let item = items.first(where: { $0.id == itemId }) else { return false }
-
-        var current = item
-        while let parentId = current.parentId {
-            if parentId == parent.id {
-                return true
-            }
-            guard let parentItem = items.first(where: { $0.id == parentId }) else {
-                break
-            }
-            current = parentItem
-        }
-        return false
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 4) {
-                // Fixed-width chevron area
-                Button(action: {
-                    // Don't toggle if this is the focused item (always expanded)
-                    if !children.isEmpty && store.focusedItemId != item.id {
-                        isExpanded.wrappedValue.toggle()
-                    }
-                }) {
-                    if !children.isEmpty {
-                        // Focused item always shows expanded chevron
-                        let isFocusedItem = store.focusedItemId == item.id
-                        let showExpanded = isFocusedItem || isExpanded.wrappedValue
-                        Image(systemName: showExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: fontSize * 0.8))
-                            .frame(width: fontSize, height: fontSize)
-                            .contentShape(Rectangle())
-                    } else {
-                        Color.clear
-                            .frame(width: fontSize, height: fontSize)
-                    }
-                }
-                .buttonStyle(.plain)
-
-                if isEditing {
-                    TextField("", text: $editText)
-                        .focused($editFieldFocused)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: fontSize))
-                        .onSubmit {
-                            commitEdit()
-                        }
-                        .onAppear {
-                            editText = item.title ?? ""
-                        }
-                        .onExitCommand {
-                            cancelEdit()
-                        }
-                } else {
-                    // Icon
-                    if item.itemType == .task {
-                        Image(systemName: item.completedAt == nil ? "square" : "checkmark.square.fill")
-                            .font(.system(size: fontSize))
-                            .onTapGesture {
-                                DispatchQueue.main.async {
-                                    store.toggleTaskCompletion(id: item.id)
-                                    onCompletionToggled()
-                                }
-                            }
-                    } else {
-                        Image(systemName: item.itemType.defaultIcon)
-                            .font(.system(size: fontSize))
-                    }
-
-                    Text(item.title ?? "Untitled")
-                        .font(.system(size: fontSize))
-
-                    Spacer()
-
-                    // Date badges
-                    if let dueDate = item.dueDate {
-                        let dueDateObj = Date(timeIntervalSince1970: TimeInterval(dueDate))
-                        let isOverdue = dueDateObj < Date()
-                        let isToday = Calendar.current.isDateInToday(dueDateObj)
-                        let isTomorrow = Calendar.current.isDateInTomorrow(dueDateObj)
-
-                        Text(isToday ? "Today" : isTomorrow ? "Tomorrow" : formatDate(dueDateObj))
-                            .font(.system(size: fontSize * 0.8))
-                            .foregroundColor(isOverdue ? .red : isToday ? .orange : .secondary)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background((isOverdue ? Color.red : isToday ? Color.orange : Color.secondary).opacity(0.1))
-                            .cornerRadius(4)
-                    }
-
-                    if let startTime = item.earliestStartTime {
-                        let startDateObj = Date(timeIntervalSince1970: TimeInterval(startTime))
-                        let isDeferred = startDateObj > Date()
-
-                        if isDeferred {
-                            Text(formatDate(startDateObj))
-                                .font(.system(size: fontSize * 0.8))
-                                .foregroundColor(.blue)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 2)
-                                .background(Color.blue.opacity(0.1))
-                                .cornerRadius(4)
-                        }
-                    }
-
-                    // Tag count badge
-                    if tagCount > 0 {
-                        HStack(spacing: 2) {
-                            Image(systemName: "tag.fill")
-                                .font(.system(size: fontSize * 0.7))
-                            Text("\(tagCount)")
-                                .font(.system(size: fontSize * 0.8))
-                        }
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.1))
-                        .cornerRadius(4)
-                    }
-
-                    // Children count
-                    if !children.isEmpty {
-                        Text("\(children.count)")
-                            .font(.system(size: fontSize * 0.9))
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-            .padding(.vertical, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                // Drop target takes precedence during drag operations
-                (store.dropTargetId == item.id && store.dropTargetPosition == .into) ? Color.accentColor.opacity(0.25) :
-                isSelected ? Color.accentColor.opacity(0.2) :
-                Color.clear
-            )
-            .overlay(
-                GeometryReader { geometry in
-                    Color.clear
-                        .preference(key: ItemHeightPreferenceKey.self, value: geometry.size.height)
-                        .onAppear {
-                            rowHeight = geometry.size.height
-                        }
-                }
-            )
-            .onPreferenceChange(ItemHeightPreferenceKey.self) { height in
-                rowHeight = height
-            }
-            .overlay(alignment: .top) {
-                if store.dropTargetId == item.id && store.dropTargetPosition == .above {
-                    Rectangle()
-                        .fill(Color.accentColor)
-                        .frame(height: 2)
-                }
-            }
-            .overlay(alignment: .bottom) {
-                if store.dropTargetId == item.id && store.dropTargetPosition == .below {
-                    Rectangle()
-                        .fill(Color.accentColor)
-                        .frame(height: 2)
-                }
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                DispatchQueue.main.async {
-                    if store.selectedItemId == item.id {
-                        store.focusedItemId = item.id
-                        settings.expandedItemIds.insert(item.id)
-                    } else {
-                        store.selectedItemId = item.id
-                    }
-                }
-            }
-            .onDrag {
-                store.draggedItemId = item.id
-                let provider = NSItemProvider()
-                provider.registerDataRepresentation(forTypeIdentifier: UTType.directGTDItem.identifier, visibility: .all) { completion in
-                    let data = item.id.data(using: .utf8)
-                    completion(data, nil)
-                    return nil
-                }
-                return provider
-            }
-            .onDrop(of: [.directGTDItem], delegate: ItemDropDelegate(
-                item: item,
-                allItems: allItems,
-                store: store,
-                rowHeight: rowHeight > 0 ? rowHeight : fontSize * 2.5 // Use measured height, fallback to estimate
-            ))
-
-            // Children (if expanded)
-            if !children.isEmpty && isExpanded.wrappedValue {
-                VStack(alignment: .leading, spacing: settings.lineSpacing) {
-                    ForEach(children, id: \.id) { child in
-                        ItemRow(item: child, allItems: allItems, store: store, settings: settings, editFieldFocused: $editFieldFocused, fontSize: fontSize, onCompletionToggled: onCompletionToggled)
-                            .id(child.id)
-                            .padding(.leading, 20)
-                    }
-                }
-            }
-        }
-    }
-
-    private var isEditing: Bool {
-        store.editingItemId == item.id
-    }
-
-    private var isSelected: Bool {
-        store.selectedItemId == item.id
-    }
-
-    private var children: [Item] {
-        allItems
-            .filter { $0.parentId == item.id }
-            .filter { child in
-                // Filter by SQL search if active (takes precedence)
-                if store.sqlSearchActive {
-                    return store.matchesSQLSearch(child)
-                }
-
-                // Filter by tag if active (takes precedence over completed check)
-                if store.filteredByTag != nil {
-                    return store.matchesTagFilter(child)
-                }
-
-                // Hide completed tasks if showCompletedTasks is false
-                if !settings.showCompletedTasks && child.itemType == .task && child.completedAt != nil {
-                    return false
-                }
-
-                return true
-            }
-            .sorted { $0.sortOrder < $1.sortOrder }
-    }
-
-    private var tagCount: Int {
-        store.getTagsForItem(itemId: item.id).count
-    }
-
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .none
-        return formatter.string(from: date)
-    }
-
-    private func commitEdit() {
-        if editText.isEmpty {
-            store.cancelEditing()
-        } else {
-            store.updateItemTitle(id: item.id, title: editText)
-            store.editingItemId = nil
-        }
-    }
-
-    private func cancelEdit() {
-        store.cancelEditing()
-    }
-}
-
 struct QuickCaptureView: View {
     @Binding var text: String
     let onSubmit: () -> Void
@@ -778,99 +653,6 @@ struct QuickCaptureView: View {
         }
         .padding(24)
         .frame(width: 400, height: 150)
-    }
-}
-
-struct ItemHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-struct ItemDropDelegate: DropDelegate {
-    let item: Item
-    let allItems: [Item]
-    let store: ItemStore
-    let rowHeight: CGFloat
-
-    func performDrop(info: DropInfo) -> Bool {
-        guard let itemProvider = info.itemProviders(for: [.directGTDItem]).first else {
-            // Clear drop indicators on failure
-            store.draggedItemId = nil
-            store.dropTargetId = nil
-            store.dropTargetPosition = nil
-            return false
-        }
-
-        itemProvider.loadDataRepresentation(forTypeIdentifier: UTType.directGTDItem.identifier) { data, error in
-            guard let data = data,
-                  let draggedItemId = String(data: data, encoding: .utf8) else {
-                // Clear drop indicators on decode failure
-                DispatchQueue.main.async {
-                    store.draggedItemId = nil
-                    store.dropTargetId = nil
-                    store.dropTargetPosition = nil
-                }
-                return
-            }
-
-            DispatchQueue.main.async {
-                let position = getDropPosition(info: info)
-                store.moveItem(draggedItemId: draggedItemId, targetItemId: item.id, position: position)
-                store.selectedItemId = draggedItemId
-
-                // Clear drop indicators after move completes
-                store.draggedItemId = nil
-                store.dropTargetId = nil
-                store.dropTargetPosition = nil
-            }
-        }
-
-        return true
-    }
-
-    func validateDrop(info: DropInfo) -> Bool {
-        // Only accept drops with our custom type (rejects external drags automatically)
-        guard info.itemProviders(for: [.directGTDItem]).first != nil else {
-            return false
-        }
-
-        // Validate using tracked draggedItemId (synchronous)
-        // Custom UTType ensures this is always a real in-app drag, never spoofed
-        let position = getDropPosition(info: info)
-        return store.canDropItem(draggedItemId: store.draggedItemId, onto: item.id, position: position)
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        let position = getDropPosition(info: info)
-        store.dropTargetId = item.id
-        store.dropTargetPosition = position
-        return DropProposal(operation: .move)
-    }
-
-    func dropExited(info: DropInfo) {
-        if store.dropTargetId == item.id {
-            store.dropTargetId = nil
-            store.dropTargetPosition = nil
-        }
-    }
-
-    private func getDropPosition(info: DropInfo) -> DropPosition {
-        // Divide the item into three zones: top 25%, middle 50%, bottom 25%
-        let y = info.location.y
-
-        // Calculate relative position within the row (0-1)
-        // DropInfo.location gives us coordinates within the drop target view
-        let relativeY = y / rowHeight
-
-        if relativeY < 0.25 {
-            return .above
-        } else if relativeY > 0.75 {
-            return .below
-        } else {
-            return .into
-        }
     }
 }
 

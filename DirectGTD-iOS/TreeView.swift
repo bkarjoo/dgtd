@@ -68,11 +68,7 @@ struct TreeView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(viewModel.displayItems, id: \.id) { item in
-                            ItemRowView(
-                                item: item,
-                                viewModel: viewModel,
-                                depth: 0
-                            )
+                            renderItemAndChildren(item: item, depth: 0)
                         }
                     }
                     .padding(.horizontal)
@@ -83,157 +79,223 @@ struct TreeView: View {
             }
         }
     }
+
+    // MARK: - Phase 3 Adapter Layer
+
+    private func computeChildren(for item: Item) -> [Item] {
+        viewModel.children(of: item.id)
+    }
+
+    private func makeRowProps(for item: Item) -> RowProps {
+        let children = computeChildren(for: item)
+        return RowProps(
+            item: item,
+            isSelected: viewModel.selectedItemId == item.id,
+            isExpanded: viewModel.expandedItemIds.contains(item.id),
+            isFocusedItem: viewModel.focusedItemId == item.id,
+            fontSize: 17, // iOS default
+            children: children,
+            childCount: children.count,
+            tagCount: 0, // iOS doesn't display tags yet
+            isDropTargetInto: false,
+            isDropTargetAbove: false,
+            isDropTargetBelow: false
+        )
+    }
+
+    /// Phase 8: Recursively render item and its children from TreeView
+    private func renderItemAndChildren(item: Item, depth: Int) -> AnyView {
+        let props = makeRowProps(for: item)
+        let callbacks = makeRowCallbacks()
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: 0) {
+                ItemRowView(
+                    item: item,
+                    viewModel: viewModel,
+                    depth: depth,
+                    rowProps: props,
+                    callbacks: callbacks
+                )
+
+                // Divider
+                Divider()
+                    .padding(.leading, CGFloat(depth) * 20 + 16)
+
+                // Render children if expanded (or focused item)
+                if props.childCount > 0 && (props.isExpanded || props.isFocusedItem) {
+                    ForEach(props.children, id: \.id) { child in
+                        renderItemAndChildren(item: child, depth: depth + 1)
+                    }
+                }
+            }
+        )
+    }
+
+    private func makeRowCallbacks() -> ItemRowCallbacks {
+        // Phase 4-5-6-7: Centralized tap, chevron, completion, and DnD handling
+        ItemRowCallbacks(
+            onTap: { [viewModel] itemId in
+                // Look up item to check type
+                guard let item = viewModel.items.first(where: { $0.id == itemId }) else { return }
+
+                if item.itemType == .note {
+                    // Notes open in editor view
+                    viewModel.editingNoteId = itemId
+                } else {
+                    // Other items focus in tree
+                    viewModel.focusedItemId = itemId
+                }
+            },
+            onChevronTap: { [viewModel] itemId in
+                let children = viewModel.children(of: itemId)
+                let result = TreeViewInteraction.toggleExpansion(
+                    itemId: itemId,
+                    isFocusedItem: viewModel.focusedItemId == itemId,
+                    hasChildren: !children.isEmpty,
+                    selectedId: viewModel.selectedItemId,
+                    expanded: viewModel.expandedItemIds,
+                    isDescendant: { childId, parentId in
+                        viewModel.isDescendant(childId: childId, of: parentId)
+                    }
+                )
+                viewModel.expandedItemIds = result.expanded
+                if let newSelectedId = result.selectedId, newSelectedId != viewModel.selectedItemId {
+                    viewModel.selectedItemId = newSelectedId
+                }
+            },
+            onToggleComplete: { [viewModel] itemId in
+                // Look up item to check if it's a task
+                guard let item = viewModel.items.first(where: { $0.id == itemId }),
+                      item.itemType == .task else { return }
+
+                // Toggle completion
+                viewModel.toggleCompletion(itemId)
+            },
+            // Phase 7: DnD callbacks (noop on iOS - not implemented yet)
+            onDragStart: { _ in },
+            onDropValidate: { _, _, _ in false },
+            onDropPerform: { _, _, _ in },
+            onDropUpdated: { _, _ in },
+            onDropExited: { _ in },
+            onDragEnd: { }
+        )
+    }
 }
 
 // MARK: - Item Row View
+/// Phase 10: Presentational row view - reads all visuals from RowProps.
+/// Only viewModel access is for deleteItem in context menu.
 struct ItemRowView: View {
     let item: Item
     @ObservedObject var viewModel: TreeViewModel
     let depth: Int
+
+    let rowProps: RowProps
+    var callbacks: ItemRowCallbacks = .noop
+
     @State private var showingDetails = false
     @State private var showingDeleteConfirmation = false
 
-    private var isExpanded: Bool {
-        viewModel.expandedItemIds.contains(item.id)
-    }
-
-    private var children: [Item] {
-        viewModel.children(of: item.id)
-    }
-
-    private var hasChildren: Bool {
-        !children.isEmpty
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Main row content
-            HStack(spacing: 8) {
-                // Item type icon - tappable for tasks to toggle completion
-                if item.itemType == .task {
-                    Button {
-                        viewModel.toggleCompletion(item.id)
-                    } label: {
-                        itemIcon
-                    }
-                    .buttonStyle(.plain)
-                } else {
+        HStack(spacing: 8) {
+            // Item type icon - tappable for tasks to toggle completion
+            if item.itemType == .task {
+                Button {
+                    callbacks.onToggleComplete(item.id)
+                } label: {
                     itemIcon
                 }
-
-                // Title
-                Text(item.title ?? "Untitled")
-                    .font(.body)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Spacer()
-
-                // Due date badge
-                if let dueDate = item.dueDate {
-                    dueDateBadge(timestamp: dueDate)
-                }
-
-                // Children count badge
-                if hasChildren {
-                    Text("\(children.count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.1))
-                        .clipShape(Capsule())
-                }
-
-                // Chevron button - tap to expand/collapse
-                Button {
-                    // Don't toggle if this is the focused item (always expanded)
-                    if hasChildren && viewModel.focusedItemId != item.id {
-                        viewModel.toggleExpanded(item.id)
-                    }
-                } label: {
-                    // Focused item always shows expanded chevron
-                    let isFocusedItem = viewModel.focusedItemId == item.id
-                    let showExpanded = isFocusedItem || isExpanded
-                    Image(systemName: hasChildren ? (showExpanded ? "chevron.down" : "chevron.right") : "chevron.right")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(hasChildren ? .secondary : .tertiary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
                 .buttonStyle(.plain)
+            } else {
+                itemIcon
             }
-            .padding(.vertical, 4)
-            .padding(.leading, CGFloat(depth) * 20)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if item.itemType == .note {
-                    // Notes open in editor view
-                    viewModel.editingNoteId = item.id
-                } else {
-                    // Other items focus in tree
-                    viewModel.focusedItemId = item.id
-                }
-            }
-            .background(viewModel.selectedItemId == item.id ? Color.accentColor.opacity(0.1) : Color.clear)
-            .contextMenu {
-                Button {
-                    showingDetails = true
-                } label: {
-                    Label("Details", systemImage: "info.circle")
-                }
 
-                if item.itemType == .task {
-                    Button {
-                        viewModel.toggleCompletion(item.id)
-                    } label: {
-                        if item.completedAt != nil {
-                            Label("Mark Incomplete", systemImage: "circle")
-                        } else {
-                            Label("Mark Complete", systemImage: "checkmark.circle")
-                        }
+            // Title
+            Text(item.title ?? "Untitled")
+                .font(.body)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer()
+
+            // Due date badge
+            if let dueDate = item.dueDate {
+                dueDateBadge(timestamp: dueDate)
+            }
+
+            // Children count badge
+            if rowProps.childCount > 0 {
+                Text("\(rowProps.childCount)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.1))
+                    .clipShape(Capsule())
+            }
+
+            // Chevron button - tap to expand/collapse
+            Button {
+                callbacks.onChevronTap(item.id)
+            } label: {
+                let showExpanded = rowProps.isFocusedItem || rowProps.isExpanded
+                Image(systemName: rowProps.childCount > 0 ? (showExpanded ? "chevron.down" : "chevron.right") : "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(rowProps.childCount > 0 ? .secondary : .tertiary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 4)
+        .padding(.leading, CGFloat(depth) * 20)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            callbacks.onTap(item.id)
+        }
+        .background(rowProps.isSelected ? Color.accentColor.opacity(0.1) : Color.clear)
+        .contextMenu {
+            Button {
+                showingDetails = true
+            } label: {
+                Label("Details", systemImage: "info.circle")
+            }
+
+            if item.itemType == .task {
+                Button {
+                    callbacks.onToggleComplete(item.id)
+                } label: {
+                    if item.completedAt != nil {
+                        Label("Mark Incomplete", systemImage: "circle")
+                    } else {
+                        Label("Mark Complete", systemImage: "checkmark.circle")
                     }
                 }
-
-                Divider()
-
-                Button(role: .destructive) {
-                    showingDeleteConfirmation = true
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
-            .sheet(isPresented: $showingDetails) {
-                ItemDetailView(item: item)
-            }
-            .confirmationDialog(
-                "Delete \"\(item.title ?? "Untitled")\"?",
-                isPresented: $showingDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive) {
-                    viewModel.deleteItem(item.id)
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This item will be permanently deleted.")
             }
 
-            // Divider
             Divider()
-                .padding(.leading, CGFloat(depth) * 20 + 16)
 
-            // Children (if expanded or this is the focused item)
-            let shouldShowChildren = hasChildren && (isExpanded || viewModel.focusedItemId == item.id)
-            if shouldShowChildren {
-                ForEach(children, id: \.id) { child in
-                    ItemRowView(
-                        item: child,
-                        viewModel: viewModel,
-                        depth: depth + 1
-                    )
-                }
+            Button(role: .destructive) {
+                showingDeleteConfirmation = true
+            } label: {
+                Label("Delete", systemImage: "trash")
             }
+        }
+        .sheet(isPresented: $showingDetails) {
+            ItemDetailView(item: item)
+        }
+        .confirmationDialog(
+            "Delete \"\(item.title ?? "Untitled")\"?",
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                viewModel.deleteItem(item.id)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This item will be permanently deleted.")
         }
     }
 
@@ -397,6 +459,20 @@ class TreeViewModel: ObservableObject {
         } else {
             expandedItemIds.insert(itemId)
         }
+    }
+
+    /// Check if childId is a descendant of parentId
+    func isDescendant(childId: String, of parentId: String) -> Bool {
+        if childId == parentId { return false }
+        guard let child = items.first(where: { $0.id == childId }) else { return false }
+
+        var current = child
+        while let pid = current.parentId {
+            if pid == parentId { return true }
+            guard let parent = items.first(where: { $0.id == pid }) else { break }
+            current = parent
+        }
+        return false
     }
 
     /// Toggle completion status of a task

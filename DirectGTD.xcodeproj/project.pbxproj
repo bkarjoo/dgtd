@@ -15,7 +15,6 @@
 		1EF674C82EE7C50200BB5B6F /* DirectGTDCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1EA486B52EC5000000000004 /* DirectGTDCore */; };
 		1EF675352EE8432300BB5B6F /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 1EF675342EE8432300BB5B6F /* GRDB */; };
 		1EF675372EE846FD00BB5B6F /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 1EF675362EE846FD00BB5B6F /* GRDB */; };
-		1EFF77E12EF0EFD50053E785 /* KeyboardShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EFF77E02EF0EFD50053E785 /* KeyboardShortcutTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,7 +56,6 @@
 		1EA4867E2EC43FAD0017F6CA /* DirectGTDTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DirectGTDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1EA486882EC43FAD0017F6CA /* DirectGTDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DirectGTDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1EA486B22EC5000000000001 /* DirectGTDCore */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = DirectGTDCore; sourceTree = "<group>"; };
-		1EFF77E02EF0EFD50053E785 /* KeyboardShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -97,6 +95,11 @@
 		1EA486812EC43FAD0017F6CA /* DirectGTDTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = DirectGTDTests;
+			sourceTree = "<group>";
+		};
+		1EA486822EC43FAD0017F6CB /* DirectGTDUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DirectGTDUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -158,11 +161,11 @@
 		1EA486682EC43FAA0017F6CA = {
 			isa = PBXGroup;
 			children = (
-				1EFF77E02EF0EFD50053E785 /* KeyboardShortcutTests.swift */,
 				1EA486B22EC5000000000001 /* DirectGTDCore */,
 				1EA486730EC43FAA0017F6CA /* Packages */,
 				1EA486732EC43FAA0017F6CA /* DirectGTD */,
 				1EA486812EC43FAD0017F6CA /* DirectGTDTests */,
+				1EA486822EC43FAD0017F6CB /* DirectGTDUITests */,
 				1E4C75F82EE86FA3004748ED /* DirectGTD-iOS */,
 				1E4C76062EE86FA5004748ED /* DirectGTD-iOSTests */,
 				1E4C76102EE86FA5004748ED /* DirectGTD-iOSUITests */,
@@ -333,6 +336,9 @@
 			dependencies = (
 				1EA4868A2EC43FAD0017F6CA /* PBXTargetDependency */,
 			);
+			fileSystemSynchronizedGroups = (
+				1EA486822EC43FAD0017F6CB /* DirectGTDUITests */,
+			);
 			name = DirectGTDUITests;
 			packageProductDependencies = (
 				1EA486B52EC5000000000004 /* DirectGTDCore */,
@@ -491,7 +497,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1EFF77E12EF0EFD50053E785 /* KeyboardShortcutTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
