@@ -32,6 +32,7 @@ class ItemStore: ObservableObject {
     @Published var noteEditorShouldToggleEditMode: Bool = false
     @Published var noteEditorIsInEditMode: Bool = false
     @Published var showingSQLSearch: Bool = false
+    @Published var treeHasKeyboardFocus: Bool = false
     @Published private(set) var savedSearches: [SavedSearch] = []
 
     // Time tracking state
@@ -118,6 +119,43 @@ class ItemStore: ObservableObject {
             selectedItemId = item.id
         } catch {
             print("Error creating item: \(error)")
+        }
+    }
+
+    /// Creates an item with full control over all fields (used by API server)
+    /// Returns the created item, or nil if creation failed
+    @discardableResult
+    func createItemWithDetails(
+        title: String,
+        parentId: String? = nil,
+        itemType: ItemType = .task,
+        notes: String? = nil
+    ) -> Item? {
+        let now = Int(Date().timeIntervalSince1970)
+
+        // Calculate sort order based on siblings
+        let siblings = items.filter { $0.parentId == parentId }
+        let maxSortOrder = siblings.map { $0.sortOrder }.max() ?? -1
+
+        let item = Item(
+            title: title,
+            itemType: itemType,
+            notes: notes,
+            parentId: parentId,
+            sortOrder: maxSortOrder + 1,
+            createdAt: now,
+            modifiedAt: now
+        )
+
+        do {
+            try repository.create(item)
+            registerCreationUndo(for: item.id)
+            loadItems()
+            selectedItemId = item.id
+            return items.first { $0.id == item.id } ?? item
+        } catch {
+            print("Error creating item: \(error)")
+            return nil
         }
     }
 
@@ -991,9 +1029,6 @@ class ItemStore: ObservableObject {
 
     private func deleteItem(itemId: String) {
         pendingCreatedItemIds.remove(itemId)
-        // Get all items in order before deletion
-        let orderedItems = getAllItemsInOrder()
-        guard let currentIndex = orderedItems.firstIndex(where: { $0.id == itemId }) else { return }
 
         // Save entire subtree for undo (descendants will be cascade soft-deleted)
         guard let itemToDelete = items.first(where: { $0.id == itemId }) else { return }
@@ -1004,6 +1039,62 @@ class ItemStore: ObservableObject {
         guard let itemTags = try? repository.getItemTagsForItems(itemIds: itemIds) else {
             errorMessage = "Failed to retrieve tag relationships. Delete aborted to prevent data loss."
             return
+        }
+
+        // BEFORE deleting: determine what to select next (while item still exists)
+        let visibleItems = getVisibleItemsInOrder()
+        NSLog("deleteItem: visibleItems.count = \(visibleItems.count)")
+        NSLog("deleteItem: itemToDelete.parentId = \(itemToDelete.parentId ?? "nil")")
+        NSLog("deleteItem: focusedItemId = \(focusedItemId ?? "nil")")
+
+        let visibleSiblings = visibleItems
+            .filter { $0.parentId == itemToDelete.parentId && $0.id != itemId }
+            .sorted { $0.sortOrder < $1.sortOrder }
+        NSLog("deleteItem: visibleSiblings.count = \(visibleSiblings.count)")
+
+        var newSelection: String? = nil
+
+        // Previous visible sibling, then next visible sibling
+        if let previous = visibleSiblings.last(where: { $0.sortOrder < itemToDelete.sortOrder }) {
+            newSelection = previous.id
+        } else if let next = visibleSiblings.first(where: { $0.sortOrder > itemToDelete.sortOrder }) {
+            newSelection = next.id
+        }
+
+        // Fall back to parent if visible
+        if newSelection == nil, let parentId = itemToDelete.parentId {
+            if isItemVisible(itemId: parentId) {
+                newSelection = parentId
+            }
+        }
+
+        // Focus-aware fallback: prefer focused item or first visible in focus subtree
+        if newSelection == nil, let focusedId = focusedItemId {
+            // In focus mode: select focused item itself, or first visible item in subtree
+            if isItemVisible(itemId: focusedId) {
+                newSelection = focusedId
+            }
+            if newSelection == nil {
+                newSelection = visibleItems.first { $0.id != itemId }?.id
+            }
+        }
+
+        // Deleting a root item with no siblings - select nearest visible root
+        if newSelection == nil {
+            let visibleRoots = visibleItems
+                .filter { $0.parentId == nil && $0.id != itemId }
+                .sorted { $0.sortOrder < $1.sortOrder }
+
+            if let previous = visibleRoots.last(where: { $0.sortOrder < itemToDelete.sortOrder }) {
+                newSelection = previous.id
+            } else if let next = visibleRoots.first(where: { $0.sortOrder > itemToDelete.sortOrder }) {
+                newSelection = next.id
+            }
+        }
+
+        // Ultimate fallback: first visible item
+        if newSelection == nil {
+            newSelection = visibleItems.first { $0.id != itemId }?.id
         }
 
         do {
@@ -1017,29 +1108,7 @@ class ItemStore: ObservableObject {
             undoManager?.setActionName("Delete Item")
 
             loadItems()
-
-            // Select previous visible item, or next visible item, or nil
-            let newOrderedItems = getAllItemsInOrder()
-
-            // Try to find a visible item going backwards from the deleted position
-            var newSelection: String? = nil
-            for i in stride(from: currentIndex - 1, through: 0, by: -1) {
-                if i < newOrderedItems.count && isItemVisible(itemId: newOrderedItems[i].id) {
-                    newSelection = newOrderedItems[i].id
-                    break
-                }
-            }
-
-            // If no visible item found backwards, try forwards
-            if newSelection == nil {
-                for i in currentIndex..<newOrderedItems.count {
-                    if isItemVisible(itemId: newOrderedItems[i].id) {
-                        newSelection = newOrderedItems[i].id
-                        break
-                    }
-                }
-            }
-
+            NSLog("deleteItem: newSelection = \(newSelection ?? "nil")")
             selectedItemId = newSelection
         } catch {
             print("Error deleting item: \(error)")
@@ -1062,6 +1131,10 @@ class ItemStore: ObservableObject {
 
         collectItems(rootItems)
         return result
+    }
+
+    private func getVisibleItemsInOrder() -> [Item] {
+        getAllItemsInOrder().filter { isItemVisible(itemId: $0.id) }
     }
 
     func shouldShowItem(_ item: Item) -> Bool {
@@ -1095,8 +1168,15 @@ class ItemStore: ObservableObject {
         // Root items are visible if they pass shouldShowItem
         guard let parentId = item.parentId else { return true }
 
-        // Check if parent is expanded
-        guard settings.expandedItemIds.contains(parentId) else { return false }
+        // In focus mode: if parent is the focused item, this item is visible
+        if let focusedId = focusedItemId, parentId == focusedId {
+            return true
+        }
+
+        // When not in focus mode, parent must be expanded to see children
+        if focusedItemId == nil {
+            guard settings.expandedItemIds.contains(parentId) else { return false }
+        }
 
         // Recursively check if parent is visible
         return isItemVisible(itemId: parentId)
@@ -1578,5 +1658,582 @@ class ItemStore: ObservableObject {
         } else {
             return startTimer(for: itemId)
         }
+    }
+
+    // MARK: - Query Functions
+
+    /// Dashboard view: Returns combined data for Next-tagged items, urgent items, and overdue items
+    struct DashboardData {
+        let nextTaggedItems: [Item]
+        let urgentItems: [Item]    // Due within 24 hours
+        let overdueItems: [Item]
+    }
+
+    func getDashboard() -> DashboardData {
+        let now = Int(Date().timeIntervalSince1970)
+        let tomorrow = now + 86400
+
+        // Get items with "Next" tag
+        let nextTag = tags.first { $0.name.lowercased() == "next" }
+        var nextTaggedItems: [Item] = []
+        if let nextTag = nextTag {
+            nextTaggedItems = items.filter { item in
+                guard item.itemType == .task && item.completedAt == nil else { return false }
+                return itemTags[item.id]?.contains { $0.id == nextTag.id } ?? false
+            }
+        }
+
+        // Overdue items (past due date, not completed)
+        let overdueItems = items.filter { item in
+            guard item.itemType == .task && item.completedAt == nil else { return false }
+            guard let dueDate = item.dueDate else { return false }
+            return dueDate < now
+        }.sorted { ($0.dueDate ?? 0) < ($1.dueDate ?? 0) }
+
+        // Urgent items (due within 24 hours, not overdue, not completed)
+        let urgentItems = items.filter { item in
+            guard item.itemType == .task && item.completedAt == nil else { return false }
+            guard let dueDate = item.dueDate else { return false }
+            return dueDate >= now && dueDate < tomorrow
+        }.sorted { ($0.dueDate ?? 0) < ($1.dueDate ?? 0) }
+
+        return DashboardData(
+            nextTaggedItems: nextTaggedItems,
+            urgentItems: urgentItems,
+            overdueItems: overdueItems
+        )
+    }
+
+    /// Returns items that are past their due date
+    func getOverdueItems() -> [Item] {
+        let now = Int(Date().timeIntervalSince1970)
+        return items.filter { item in
+            guard item.itemType == .task && item.completedAt == nil else { return false }
+            guard let dueDate = item.dueDate else { return false }
+            return dueDate < now
+        }.sorted { ($0.dueDate ?? 0) < ($1.dueDate ?? 0) }
+    }
+
+    /// Returns items due today
+    func getItemsDueToday() -> [Item] {
+        let calendar = Calendar.current
+        let startOfDay = Int(calendar.startOfDay(for: Date()).timeIntervalSince1970)
+        let endOfDay = startOfDay + 86400
+
+        return items.filter { item in
+            guard item.itemType == .task && item.completedAt == nil else { return false }
+            guard let dueDate = item.dueDate else { return false }
+            return dueDate >= startOfDay && dueDate < endOfDay
+        }.sorted { ($0.dueDate ?? 0) < ($1.dueDate ?? 0) }
+    }
+
+    /// Returns items due tomorrow
+    func getItemsDueTomorrow() -> [Item] {
+        let calendar = Calendar.current
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date())!
+        let startOfTomorrow = Int(calendar.startOfDay(for: tomorrow).timeIntervalSince1970)
+        let endOfTomorrow = startOfTomorrow + 86400
+
+        return items.filter { item in
+            guard item.itemType == .task && item.completedAt == nil else { return false }
+            guard let dueDate = item.dueDate else { return false }
+            return dueDate >= startOfTomorrow && dueDate < endOfTomorrow
+        }.sorted { ($0.dueDate ?? 0) < ($1.dueDate ?? 0) }
+    }
+
+    /// Returns items due this week (from now until end of week)
+    func getItemsDueThisWeek() -> [Item] {
+        let calendar = Calendar.current
+        let now = Int(Date().timeIntervalSince1970)
+
+        // Get end of week (Sunday night or Saturday night depending on locale)
+        var components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())
+        components.weekday = calendar.firstWeekday + 6  // End of week
+        let endOfWeek = calendar.date(from: components)!
+        let endOfWeekTimestamp = Int(calendar.startOfDay(for: endOfWeek).timeIntervalSince1970) + 86400
+
+        return items.filter { item in
+            guard item.itemType == .task && item.completedAt == nil else { return false }
+            guard let dueDate = item.dueDate else { return false }
+            return dueDate >= now && dueDate < endOfWeekTimestamp
+        }.sorted { ($0.dueDate ?? 0) < ($1.dueDate ?? 0) }
+    }
+
+    /// Returns actionable tasks (not deferred, not completed)
+    func getAvailableTasks() -> [Item] {
+        let now = Int(Date().timeIntervalSince1970)
+
+        return items.filter { item in
+            guard item.itemType == .task && item.completedAt == nil else { return false }
+            // Not deferred (no earliest start time or earliest start time has passed)
+            if let earliestStart = item.earliestStartTime, earliestStart > now {
+                return false
+            }
+            return true
+        }.sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    /// Returns deferred tasks (earliest_start_time in the future)
+    func getDeferredTasks() -> [Item] {
+        let now = Int(Date().timeIntervalSince1970)
+
+        return items.filter { item in
+            guard item.itemType == .task && item.completedAt == nil else { return false }
+            guard let earliestStart = item.earliestStartTime else { return false }
+            return earliestStart > now
+        }.sorted { ($0.earliestStartTime ?? 0) < ($1.earliestStartTime ?? 0) }
+    }
+
+    /// Returns completed tasks, optionally filtered by completion time
+    /// - Parameter since: Optional timestamp. If provided, only returns tasks completed after this time
+    func getCompletedTasks(since: Int? = nil) -> [Item] {
+        return items.filter { item in
+            guard item.itemType == .task else { return false }
+            guard let completedAt = item.completedAt else { return false }
+            if let since = since {
+                return completedAt >= since
+            }
+            return true
+        }.sorted { ($0.completedAt ?? 0) > ($1.completedAt ?? 0) }  // Most recently completed first
+    }
+
+    /// Returns oldest incomplete tasks (for finding neglected items)
+    /// - Parameter limit: Maximum number of items to return
+    func getOldestTasks(limit: Int = 20) -> [Item] {
+        return items.filter { item in
+            item.itemType == .task && item.completedAt == nil
+        }
+        .sorted { $0.createdAt < $1.createdAt }
+        .prefix(limit)
+        .map { $0 }
+    }
+
+    /// Returns projects that have no "Next" tagged items (stuck projects)
+    /// A project is stuck if:
+    /// - It has no "Next" tagged incomplete tasks
+    /// - It is not tagged as "on-hold"
+    func getStuckProjects() -> [Item] {
+        let nextTag = tags.first { $0.name.lowercased() == "next" }
+        let onHoldTagIds = Set(tags.filter { $0.name.lowercased() == "on-hold" }.map { $0.id })
+
+        return items.filter { project in
+            guard project.itemType == .project else { return false }
+
+            // Exclude on-hold projects
+            if let projectTags = itemTags[project.id],
+               projectTags.contains(where: { onHoldTagIds.contains($0.id) }) {
+                return false
+            }
+
+            // If no Next tag exists in the system, all non-on-hold projects are stuck
+            guard let nextTag = nextTag else { return true }
+
+            // Get all descendant tasks of this project
+            let descendants = getDescendants(of: project.id)
+            let incompleteTasks = descendants.filter { $0.itemType == .task && $0.completedAt == nil }
+
+            // Check if any incomplete task has the "Next" tag
+            let hasNextTaggedTask = incompleteTasks.contains { task in
+                itemTags[task.id]?.contains { $0.id == nextTag.id } ?? false
+            }
+
+            // Stuck if no Next-tagged incomplete tasks
+            return !hasNextTaggedTask
+        }
+    }
+
+    /// Returns all descendants (children, grandchildren, etc.) of an item
+    func getDescendants(of itemId: String) -> [Item] {
+        var descendants: [Item] = []
+        var queue = items.filter { $0.parentId == itemId }
+
+        while !queue.isEmpty {
+            let item = queue.removeFirst()
+            descendants.append(item)
+            queue.append(contentsOf: items.filter { $0.parentId == item.id })
+        }
+
+        return descendants
+    }
+
+    /// Returns items that have all of the specified tag names
+    /// - Parameter tagNames: Array of tag names to filter by
+    func getItemsByTagNames(_ tagNames: [String]) -> [Item] {
+        let lowercasedNames = Set(tagNames.map { $0.lowercased() })
+        let matchingTags = tags.filter { lowercasedNames.contains($0.name.lowercased()) }
+
+        guard !matchingTags.isEmpty else { return [] }
+
+        let matchingTagIds = Set(matchingTags.map { $0.id })
+
+        return items.filter { item in
+            guard let tags = itemTags[item.id] else { return false }
+            let tagIds = Set(tags.map { $0.id })
+            return matchingTagIds.allSatisfy { tagIds.contains($0) }
+        }
+    }
+
+    // MARK: - Action Functions
+
+    /// Archives an item by moving it to the Archive folder
+    /// Creates the Archive folder if it doesn't exist
+    /// - Returns: true if successful, false otherwise
+    @discardableResult
+    func archiveItem(id: String) -> Bool {
+        guard var item = items.first(where: { $0.id == id }) else { return false }
+
+        // Find or create Archive folder
+        var archiveFolder = items.first { $0.title == "Archive" && $0.itemType == .folder && $0.parentId == nil }
+
+        if archiveFolder == nil {
+            // Create Archive folder at root level
+            let now = Int(Date().timeIntervalSince1970)
+            let rootItems = items.filter { $0.parentId == nil }
+            let maxSortOrder = rootItems.map { $0.sortOrder }.max() ?? -1
+
+            let newArchive = Item(
+                title: "Archive",
+                itemType: .folder,
+                parentId: nil,
+                sortOrder: maxSortOrder + 1,
+                createdAt: now,
+                modifiedAt: now
+            )
+
+            do {
+                try repository.create(newArchive)
+                loadItems()
+                archiveFolder = items.first { $0.id == newArchive.id }
+            } catch {
+                print("Error creating Archive folder: \(error)")
+                return false
+            }
+        }
+
+        guard let archive = archiveFolder else { return false }
+
+        // Move item to Archive
+        let siblings = items.filter { $0.parentId == archive.id }
+        let maxSortOrder = siblings.map { $0.sortOrder }.max() ?? -1
+
+        item.parentId = archive.id
+        item.sortOrder = maxSortOrder + 1
+        item.modifiedAt = Int(Date().timeIntervalSince1970)
+
+        do {
+            try repository.update(item)
+            loadItems()
+            return true
+        } catch {
+            print("Error archiving item: \(error)")
+            return false
+        }
+    }
+
+    /// Completes multiple tasks at once
+    /// - Parameter ids: Array of item IDs to complete
+    /// - Returns: Number of items successfully completed
+    @discardableResult
+    func completeMultiple(ids: [String]) -> Int {
+        var completedCount = 0
+        let now = Int(Date().timeIntervalSince1970)
+
+        for id in ids {
+            guard var item = items.first(where: { $0.id == id }) else { continue }
+            guard item.itemType == .task && item.completedAt == nil else { continue }
+
+            item.completedAt = now
+            item.modifiedAt = now
+
+            do {
+                try repository.update(item)
+                completedCount += 1
+            } catch {
+                print("Error completing item \(id): \(error)")
+            }
+        }
+
+        if completedCount > 0 {
+            loadItems()
+        }
+
+        return completedCount
+    }
+
+    /// Creates an instance from a template
+    /// Copies the template and all its children, removing template markers
+    /// - Parameters:
+    ///   - templateId: ID of the template to instantiate
+    ///   - parentId: Optional parent ID for the new instance (nil = same parent as template)
+    /// - Returns: The root item of the new instance, or nil on failure
+    @discardableResult
+    func instantiateTemplate(templateId: String, parentId: String? = nil) -> Item? {
+        guard let template = items.first(where: { $0.id == templateId && $0.itemType == .template }) else {
+            return nil
+        }
+
+        let now = Int(Date().timeIntervalSince1970)
+
+        // Determine parent for new instance
+        let targetParentId = parentId ?? template.parentId
+        let siblings = items.filter { $0.parentId == targetParentId }
+        let maxSortOrder = siblings.map { $0.sortOrder }.max() ?? -1
+
+        // Create the root item (convert template to project)
+        var rootItem = Item(
+            title: template.title,
+            itemType: .project,
+            notes: template.notes,
+            parentId: targetParentId,
+            sortOrder: maxSortOrder + 1,
+            createdAt: now,
+            modifiedAt: now
+        )
+
+        do {
+            try repository.create(rootItem)
+
+            // Recursively copy children
+            copyChildren(from: template.id, to: rootItem.id, now: now)
+
+            // Copy tags from template to new root
+            if let templateTags = itemTags[template.id] {
+                for tag in templateTags {
+                    try? repository.addTagToItem(itemId: rootItem.id, tagId: tag.id)
+                }
+            }
+
+            loadItems()
+            return items.first { $0.id == rootItem.id }
+        } catch {
+            print("Error instantiating template: \(error)")
+            return nil
+        }
+    }
+
+    /// Helper: Recursively copies children from one parent to another
+    private func copyChildren(from sourceParentId: String, to targetParentId: String, now: Int) {
+        let children = items.filter { $0.parentId == sourceParentId }.sorted { $0.sortOrder < $1.sortOrder }
+
+        for (index, child) in children.enumerated() {
+            // Convert template children to appropriate types
+            let newType: ItemType
+            switch child.itemType {
+            case .template:
+                newType = .project
+            default:
+                newType = child.itemType
+            }
+
+            let newChild = Item(
+                title: child.title,
+                itemType: newType,
+                notes: child.notes,
+                parentId: targetParentId,
+                sortOrder: index,
+                createdAt: now,
+                modifiedAt: now,
+                dueDate: child.dueDate,
+                earliestStartTime: child.earliestStartTime
+            )
+
+            do {
+                try repository.create(newChild)
+
+                // Copy tags
+                if let childTags = itemTags[child.id] {
+                    for tag in childTags {
+                        try? repository.addTagToItem(itemId: newChild.id, tagId: tag.id)
+                    }
+                }
+
+                // Recursively copy grandchildren
+                copyChildren(from: child.id, to: newChild.id, now: now)
+            } catch {
+                print("Error copying child \(child.id): \(error)")
+            }
+        }
+    }
+
+    /// Empties the trash by permanently deleting soft-deleted items
+    /// - Parameter keepSince: Optional timestamp. Items deleted after this time are kept.
+    /// - Returns: Number of items permanently deleted
+    @discardableResult
+    func emptyTrash(keepSince: Int? = nil) -> Int {
+        do {
+            let cutoff = keepSince ?? Int.max
+            let deletedCount = try softDeleteService.permanentlyDeleteItemsOlderThan(cutoff)
+            return deletedCount
+        } catch {
+            print("Error emptying trash: \(error)")
+            return 0
+        }
+    }
+
+    // MARK: - Ordering Functions
+
+    /// Swaps the sort order of two items
+    /// - Parameters:
+    ///   - id1: First item ID
+    ///   - id2: Second item ID
+    /// - Returns: true if successful
+    @discardableResult
+    func swapItemOrder(id1: String, id2: String) -> Bool {
+        guard var item1 = items.first(where: { $0.id == id1 }),
+              var item2 = items.first(where: { $0.id == id2 }) else {
+            return false
+        }
+
+        guard item1.parentId == item2.parentId else {
+            return false
+        }
+
+        // Swap sort orders
+        let temp = item1.sortOrder
+        item1.sortOrder = item2.sortOrder
+        item2.sortOrder = temp
+
+        let now = Int(Date().timeIntervalSince1970)
+        item1.modifiedAt = now
+        item2.modifiedAt = now
+
+        do {
+            try repository.update(item1)
+            try repository.update(item2)
+            loadItems()
+            return true
+        } catch {
+            print("Error swapping items: \(error)")
+            return false
+        }
+    }
+
+    /// Moves an item to a specific position among its siblings
+    /// - Parameters:
+    ///   - id: Item ID to move
+    ///   - position: Zero-based position (0 = first)
+    /// - Returns: true if successful
+    @discardableResult
+    func moveToPosition(id: String, position: Int) -> Bool {
+        guard let item = items.first(where: { $0.id == id }) else { return false }
+
+        var siblings = items
+            .filter { $0.parentId == item.parentId && $0.id != id }
+            .sorted { $0.sortOrder < $1.sortOrder }
+
+        // Clamp position
+        let targetPosition = max(0, min(position, siblings.count))
+
+        // Insert at position
+        siblings.insert(item, at: targetPosition)
+
+        // Reassign sort orders
+        let now = Int(Date().timeIntervalSince1970)
+        do {
+            for (index, var sibling) in siblings.enumerated() {
+                if sibling.sortOrder != index {
+                    sibling.sortOrder = index
+                    sibling.modifiedAt = now
+                    try repository.update(sibling)
+                }
+            }
+            loadItems()
+            return true
+        } catch {
+            print("Error moving to position: \(error)")
+            return false
+        }
+    }
+
+    /// Reorders all children of a parent based on provided order
+    /// - Parameters:
+    ///   - parentId: Parent item ID (nil for root items)
+    ///   - orderedIds: Array of child IDs in desired order
+    /// - Returns: true if successful
+    @discardableResult
+    func reorderChildren(parentId: String?, orderedIds: [String]) -> Bool {
+        let currentChildren = items.filter { $0.parentId == parentId }
+        let currentIds = Set(currentChildren.map { $0.id })
+        let orderedIdSet = Set(orderedIds)
+
+        guard currentChildren.count == orderedIds.count,
+              currentIds == orderedIdSet else {
+            return false
+        }
+
+        let now = Int(Date().timeIntervalSince1970)
+
+        do {
+            for (index, id) in orderedIds.enumerated() {
+                guard var item = items.first(where: { $0.id == id && $0.parentId == parentId }) else {
+                    continue
+                }
+
+                if item.sortOrder != index {
+                    item.sortOrder = index
+                    item.modifiedAt = now
+                    try repository.update(item)
+                }
+            }
+            loadItems()
+            return true
+        } catch {
+            print("Error reordering children: \(error)")
+            return false
+        }
+    }
+
+    // MARK: - Tree/Hierarchy Functions
+
+    /// Represents a node in the item tree
+    struct TreeNode {
+        let item: Item
+        let children: [TreeNode]
+        let depth: Int
+        let tags: [Tag]
+    }
+
+    /// Builds a tree structure starting from a root
+    /// - Parameters:
+    ///   - rootId: Optional root item ID. If nil, builds from all root items.
+    ///   - maxDepth: Maximum depth to traverse. nil = unlimited.
+    /// - Returns: Array of root TreeNodes
+    func getTree(rootId: String? = nil, maxDepth: Int? = nil) -> [TreeNode] {
+        if let rootId = rootId {
+            // Build tree from specific root
+            guard let rootItem = items.first(where: { $0.id == rootId }) else {
+                return []
+            }
+            return [buildTreeNode(item: rootItem, depth: 0, maxDepth: maxDepth)]
+        } else {
+            // Build from all root items
+            let rootItems = items
+                .filter { $0.parentId == nil }
+                .sorted { $0.sortOrder < $1.sortOrder }
+
+            return rootItems.map { buildTreeNode(item: $0, depth: 0, maxDepth: maxDepth) }
+        }
+    }
+
+    /// Helper: Recursively builds a tree node
+    private func buildTreeNode(item: Item, depth: Int, maxDepth: Int?) -> TreeNode {
+        let childItems: [TreeNode]
+
+        if let maxDepth = maxDepth, depth >= maxDepth {
+            childItems = []
+        } else {
+            let children = items
+                .filter { $0.parentId == item.id }
+                .sorted { $0.sortOrder < $1.sortOrder }
+
+            childItems = children.map { buildTreeNode(item: $0, depth: depth + 1, maxDepth: maxDepth) }
+        }
+
+        return TreeNode(
+            item: item,
+            children: childItems,
+            depth: depth,
+            tags: itemTags[item.id] ?? []
+        )
     }
 }

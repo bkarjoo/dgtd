@@ -3,6 +3,27 @@ import Foundation
 import CloudKit
 import Combine
 
+/// Protocol abstraction to allow mocking CloudKit interactions in tests.
+protocol CloudKitManagerProtocol: AnyObject {
+    var zoneID: CKRecordZone.ID { get }
+    var container: CKContainer { get }
+    var privateDatabase: CKDatabase { get }
+    var accountStatus: CKAccountStatus { get }
+    var isZoneReady: Bool { get }
+    var accountStatusPublisher: Published<CKAccountStatus>.Publisher { get }
+    var isZoneReadyPublisher: Published<Bool>.Publisher { get }
+    var isAccountAvailable: Bool { get }
+
+    func checkAccountStatus() async throws -> CKAccountStatus
+    func ensureZoneExists() async throws
+    func initialize() async throws
+    func registerForSubscriptions() async throws
+    func unregisterSubscriptions() async throws
+
+    func recordID(for recordName: String) -> CKRecord.ID
+    func newRecord(type: String, recordName: String) -> CKRecord
+}
+
 /// Manages CloudKit container, zone setup, and account status.
 class CloudKitManager {
     static let shared = CloudKitManager()
@@ -165,6 +186,13 @@ class CloudKitManager {
             NSLog("CloudKitManager: Subscription already deleted")
         }
     }
+}
+
+// MARK: - CloudKitManagerProtocol conformance
+
+extension CloudKitManager: CloudKitManagerProtocol {
+    var accountStatusPublisher: Published<CKAccountStatus>.Publisher { $accountStatus }
+    var isZoneReadyPublisher: Published<Bool>.Publisher { $isZoneReady }
 }
 
 // MARK: - Errors

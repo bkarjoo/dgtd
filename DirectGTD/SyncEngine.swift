@@ -8,7 +8,7 @@ import Combine
 /// Handles dirty tracking, batch uploads, change token management, conflict resolution,
 /// and automatic retry with exponential backoff.
 class SyncEngine: ObservableObject {
-    private let cloudKitManager: CloudKitManager
+    private let cloudKitManager: CloudKitManagerProtocol
     private let database: DatabaseProvider
     private let metadataStore: SyncMetadataStore
 
@@ -68,7 +68,7 @@ class SyncEngine: ObservableObject {
     private var periodicSyncTimer: Timer?
     private let periodicSyncInterval: TimeInterval = 5 * 60  // 5 minutes
 
-    init(cloudKitManager: CloudKitManager = .shared,
+    init(cloudKitManager: CloudKitManagerProtocol = CloudKitManager.shared,
          database: DatabaseProvider = Database.shared) {
         self.cloudKitManager = cloudKitManager
         self.database = database
@@ -1228,7 +1228,14 @@ class SyncEngine: ObservableObject {
     private func applyChangedRecord(_ record: CKRecord, to db: GRDB.Database) throws {
         switch record.recordType {
         case CloudKitManager.RecordType.item:
-            if let item = CKRecordConverters.item(from: record) {
+            if var item = CKRecordConverters.item(from: record) {
+                // Ensure parent exists; if not, drop the reference to avoid FK failures.
+                if let parentId = item.parentId, !parentId.isEmpty,
+                   try Item.fetchOne(db, key: parentId) == nil {
+                    NSLog("SyncEngine: Missing parent \(parentId) for item \(item.id) - resetting parent to nil")
+                    item.parentId = nil
+                }
+
                 // Check for conflict with local changes
                 if let existingItem = try Item.fetchOne(db, key: item.id),
                    existingItem.needsPush == 1 {
@@ -1358,16 +1365,16 @@ class SyncEngine: ObservableObject {
             let recordName = recordID.recordName
 
             guard let serverRecord = error.serverRecord else {
-                // No server record available - clear change tag and mark for retry
+                // No server record available - clear metadata and mark for retry
                 // This forces a fresh push that will either succeed or get the server record next time
-                NSLog("SyncEngine: Conflict for \(recordName) has no serverRecord - clearing change tag for retry")
+                NSLog("SyncEngine: Conflict for \(recordName) has no serverRecord - clearing metadata for retry")
                 try dbQueue.write { db in
                     // Try all tables since we don't know the record type without serverRecord
-                    try db.execute(sql: "UPDATE items SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
-                    try db.execute(sql: "UPDATE tags SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
-                    try db.execute(sql: "UPDATE item_tags SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
-                    try db.execute(sql: "UPDATE time_entries SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
-                    try db.execute(sql: "UPDATE saved_searches SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE items SET ck_change_tag = NULL, ck_system_fields = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE tags SET ck_change_tag = NULL, ck_system_fields = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE item_tags SET ck_change_tag = NULL, ck_system_fields = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE time_entries SET ck_change_tag = NULL, ck_system_fields = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE saved_searches SET ck_change_tag = NULL, ck_system_fields = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
                 }
                 continue
             }

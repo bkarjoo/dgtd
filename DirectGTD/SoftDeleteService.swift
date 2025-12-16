@@ -377,4 +377,59 @@ class SoftDeleteService {
             NSLog("SoftDeleteService: Purged tombstones - items: \(itemsDeleted), tags: \(tagsDeleted), item_tags: \(itemTagsDeleted), time_entries: \(timeEntriesDeleted), saved_searches: \(savedSearchesDeleted)")
         }
     }
+
+    /// Permanently delete soft-deleted items older than the specified timestamp.
+    /// - Parameter olderThan: Delete items with deleted_at before this timestamp
+    /// - Returns: Number of items permanently deleted
+    func permanentlyDeleteItemsOlderThan(_ olderThan: Int) throws -> Int {
+        let dbQueue = try getQueue()
+        var totalDeleted = 0
+
+        try dbQueue.write { db in
+            // 1. Delete item_tags for deleted items older than cutoff
+            try db.execute(
+                sql: """
+                    DELETE FROM item_tags
+                    WHERE item_id IN (
+                        SELECT id FROM items
+                        WHERE deleted_at IS NOT NULL AND deleted_at < ?
+                    )
+                """,
+                arguments: [olderThan]
+            )
+
+            // 2. Delete time_entries for deleted items older than cutoff
+            try db.execute(
+                sql: """
+                    DELETE FROM time_entries
+                    WHERE item_id IN (
+                        SELECT id FROM items
+                        WHERE deleted_at IS NOT NULL AND deleted_at < ?
+                    )
+                """,
+                arguments: [olderThan]
+            )
+
+            // 3. Delete the items themselves (only leaf nodes first to handle hierarchy)
+            // This may need multiple passes for deeply nested structures
+            var deletedInPass = 1
+            while deletedInPass > 0 {
+                try db.execute(
+                    sql: """
+                        DELETE FROM items
+                        WHERE deleted_at IS NOT NULL
+                        AND deleted_at < ?
+                        AND id NOT IN (SELECT parent_id FROM items WHERE parent_id IS NOT NULL)
+                    """,
+                    arguments: [olderThan]
+                )
+                deletedInPass = db.changesCount
+                totalDeleted += deletedInPass
+            }
+
+            NSLog("SoftDeleteService: Permanently deleted \(totalDeleted) items older than \(olderThan)")
+        }
+
+        return totalDeleted
+    }
 }

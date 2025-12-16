@@ -8,6 +8,8 @@ class MockCloudKitManager: CloudKitManagerProtocol {
     // MARK: - Configuration
 
     let zoneID: CKRecordZone.ID
+    let container: CKContainer
+    let privateDatabase: CKDatabase
 
     // MARK: - Published State
 
@@ -52,6 +54,8 @@ class MockCloudKitManager: CloudKitManagerProtocol {
 
     init(zoneName: String = "TestZone") {
         self.zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
+        self.container = CKContainer(identifier: "iCloud.com.directgtd.test")
+        self.privateDatabase = container.privateCloudDatabase
     }
 
     // MARK: - Async Operations

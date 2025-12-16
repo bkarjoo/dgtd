@@ -9,8 +9,8 @@ import DirectGTDCore
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var settings = UserSettings()
-    @StateObject private var store: ItemStore
+    @ObservedObject var store: ItemStore
+    @ObservedObject var settings: UserSettings
     @ObservedObject var syncEngine: SyncEngine
     @State private var showingAddItem = false
     @State private var newItemName = ""
@@ -21,11 +21,10 @@ struct ContentView: View {
     @State private var rightPaneView: RightPaneView
     @Environment(\.undoManager) var undoManager
 
-    init(syncEngine: SyncEngine) {
+    init(store: ItemStore, settings: UserSettings, syncEngine: SyncEngine) {
+        self.store = store
+        self.settings = settings
         self.syncEngine = syncEngine
-        let settings = UserSettings()
-        _settings = StateObject(wrappedValue: settings)
-        _store = StateObject(wrappedValue: ItemStore(settings: settings))
         _rightPaneView = State(initialValue: settings.rightPaneView)
     }
 
@@ -234,6 +233,13 @@ struct ContentView: View {
                 store.loadItems()
                 return .handled
             }
+            if keyPress.key == .return && keyPress.modifiers.isEmpty && !store.treeHasKeyboardFocus {
+                DispatchQueue.main.async {
+                    store.createItemAfterSelected()
+                    store.focusTreeView()  // ensure new row becomes first responder for typing
+                }
+                return .handled
+            }
             return .ignored
         }
     }
@@ -245,5 +251,6 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView(syncEngine: SyncEngine())
+    let settings = UserSettings()
+    ContentView(store: ItemStore(settings: settings), settings: settings, syncEngine: SyncEngine())
 }

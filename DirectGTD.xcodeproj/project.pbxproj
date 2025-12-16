@@ -15,6 +15,7 @@
 		1EF674C82EE7C50200BB5B6F /* DirectGTDCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1EA486B52EC5000000000004 /* DirectGTDCore */; };
 		1EF675352EE8432300BB5B6F /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 1EF675342EE8432300BB5B6F /* GRDB */; };
 		1EF675372EE846FD00BB5B6F /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 1EF675362EE846FD00BB5B6F /* GRDB */; };
+		1EFF77E12EF0EFD50053E785 /* KeyboardShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EFF77E02EF0EFD50053E785 /* KeyboardShortcutTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +57,7 @@
 		1EA4867E2EC43FAD0017F6CA /* DirectGTDTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DirectGTDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1EA486882EC43FAD0017F6CA /* DirectGTDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DirectGTDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1EA486B22EC5000000000001 /* DirectGTDCore */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = DirectGTDCore; sourceTree = "<group>"; };
+		1EFF77E02EF0EFD50053E785 /* KeyboardShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -156,6 +158,7 @@
 		1EA486682EC43FAA0017F6CA = {
 			isa = PBXGroup;
 			children = (
+				1EFF77E02EF0EFD50053E785 /* KeyboardShortcutTests.swift */,
 				1EA486B22EC5000000000001 /* DirectGTDCore */,
 				1EA486730EC43FAA0017F6CA /* Packages */,
 				1EA486732EC43FAA0017F6CA /* DirectGTD */,
@@ -369,6 +372,7 @@
 					};
 					1EA486872EC43FAD0017F6CA = {
 						CreatedOnToolsVersion = 26.1;
+						LastSwiftMigration = 2620;
 						TestTargetID = 1EA486702EC43FAA0017F6CA;
 					};
 				};
@@ -487,6 +491,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1EFF77E12EF0EFD50053E785 /* KeyboardShortcutTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -948,6 +953,7 @@
 		1EA486992EC43FAD0017F6CA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YJ76W2FDLJ;
@@ -962,6 +968,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";
@@ -973,6 +980,7 @@
 		1EA4869A2EC43FAD0017F6CA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = YJ76W2FDLJ;

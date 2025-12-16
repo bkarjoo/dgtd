@@ -94,6 +94,12 @@ struct TreeView: View {
         .focusable()
         .focusEffectDisabled()
         .focused($isFocused)
+        .onChange(of: isFocused) { newValue in
+            store.treeHasKeyboardFocus = newValue
+        }
+        .onDisappear {
+            store.treeHasKeyboardFocus = false
+        }
         .onKeyPress { keyPress in
             guard store.editingItemId == nil else { return .ignored }
             switch keyPress.key {
@@ -643,10 +649,12 @@ struct ItemRow: View {
             .contentShape(Rectangle())
             .onTapGesture {
                 DispatchQueue.main.async {
-                    store.selectedItemId = item.id
-                    store.focusedItemId = item.id
-                    // Focused items are always expanded
-                    settings.expandedItemIds.insert(item.id)
+                    if store.selectedItemId == item.id {
+                        store.focusedItemId = item.id
+                        settings.expandedItemIds.insert(item.id)
+                    } else {
+                        store.selectedItemId = item.id
+                    }
                 }
             }
             .onDrag {

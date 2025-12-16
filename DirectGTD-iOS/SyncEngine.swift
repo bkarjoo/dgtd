@@ -13,7 +13,7 @@ import Combine
 
 /// Sync engine for iOS - pushes local changes and pulls remote changes from CloudKit
 class SyncEngine: ObservableObject {
-    private let cloudKitManager: CloudKitManager
+    private let cloudKitManager: CloudKitManagerProtocol
     private let database: DatabaseProvider
     private let metadataStore: SyncMetadataStore
 
@@ -39,7 +39,7 @@ class SyncEngine: ObservableObject {
     @Published private(set) var lastSyncDate: Date?
     @Published private(set) var itemCount: Int = 0
 
-    init(cloudKitManager: CloudKitManager = .shared,
+    init(cloudKitManager: CloudKitManagerProtocol = CloudKitManager.shared,
          database: DatabaseProvider = Database.shared) {
         self.cloudKitManager = cloudKitManager
         self.database = database
@@ -336,14 +336,14 @@ class SyncEngine: ObservableObject {
             let recordName = recordID.recordName
 
             guard let serverRecord = error.serverRecord else {
-                // No server record available - clear change tag and mark for retry
-                NSLog("SyncEngine: Conflict for \(recordName) has no serverRecord - clearing change tag for retry")
+                // No server record available - clear metadata and mark for retry
+                NSLog("SyncEngine: Conflict for \(recordName) has no serverRecord - clearing metadata for retry")
                 try dbQueue.write { db in
-                    try db.execute(sql: "UPDATE items SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
-                    try db.execute(sql: "UPDATE tags SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
-                    try db.execute(sql: "UPDATE item_tags SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
-                    try db.execute(sql: "UPDATE time_entries SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
-                    try db.execute(sql: "UPDATE saved_searches SET ck_change_tag = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE items SET ck_change_tag = NULL, ck_system_fields = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE tags SET ck_change_tag = NULL, ck_system_fields = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE item_tags SET ck_change_tag = NULL, ck_system_fields = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE time_entries SET ck_change_tag = NULL, ck_system_fields = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
+                    try db.execute(sql: "UPDATE saved_searches SET ck_change_tag = NULL, ck_system_fields = NULL, needs_push = 1 WHERE ck_record_name = ?", arguments: [recordName])
                 }
                 continue
             }
@@ -828,7 +828,12 @@ class SyncEngine: ObservableObject {
 
             // 2. Insert items in parent-first order
             for record in sortedItems {
-                if let item = CKRecordConverters.item(from: record) {
+                if var item = CKRecordConverters.item(from: record) {
+                    if let parentId = item.parentId, !parentId.isEmpty,
+                       try Item.fetchOne(db, key: parentId) == nil {
+                        NSLog("SyncEngine: Missing parent \(parentId) for item \(item.id) - resetting parent to nil")
+                        item.parentId = nil
+                    }
                     try item.save(db, onConflict: .replace)
                 }
             }

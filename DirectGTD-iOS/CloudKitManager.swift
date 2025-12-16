@@ -10,6 +10,27 @@ import Foundation
 import CloudKit
 import Combine
 
+/// Protocol abstraction to allow dependency injection/mocking.
+protocol CloudKitManagerProtocol: AnyObject {
+    var zoneID: CKRecordZone.ID { get }
+    var container: CKContainer { get }
+    var privateDatabase: CKDatabase { get }
+    var accountStatus: CKAccountStatus { get }
+    var isZoneReady: Bool { get }
+    var accountStatusPublisher: Published<CKAccountStatus>.Publisher { get }
+    var isZoneReadyPublisher: Published<Bool>.Publisher { get }
+    var isAccountAvailable: Bool { get }
+
+    func checkAccountStatus() async throws -> CKAccountStatus
+    func ensureZoneExists() async throws
+    func initialize() async throws
+    func registerForSubscriptions() async throws
+    func unregisterSubscriptions() async throws
+
+    func recordID(for recordName: String) -> CKRecord.ID
+    func newRecord(type: String, recordName: String) -> CKRecord
+}
+
 /// Manages CloudKit container, zone setup, and account status for iOS.
 class CloudKitManager {
     static let shared = CloudKitManager()
@@ -114,6 +135,44 @@ class CloudKitManager {
         let recordID = CKRecord.ID(recordName: recordName, zoneID: zoneID)
         return CKRecord(recordType: type, recordID: recordID)
     }
+
+    // MARK: - Subscriptions
+
+    static let subscriptionID = "DirectGTD-zone-changes"
+
+    func registerForSubscriptions() async throws {
+        let subscriptionID = Self.subscriptionID
+
+        do {
+            _ = try await privateDatabase.subscription(for: subscriptionID)
+            NSLog("CloudKitManager: Subscription '\(subscriptionID)' already exists")
+            return
+        } catch let error as CKError where error.code == .unknownItem {
+            NSLog("CloudKitManager: Creating subscription '\(subscriptionID)'")
+        } catch {
+            NSLog("CloudKitManager: Error checking subscription: \(error)")
+            throw error
+        }
+
+        let subscription = CKDatabaseSubscription(subscriptionID: subscriptionID)
+        let notificationInfo = CKSubscription.NotificationInfo()
+        notificationInfo.shouldSendContentAvailable = true
+        subscription.notificationInfo = notificationInfo
+
+        _ = try await privateDatabase.save(subscription)
+        NSLog("CloudKitManager: Subscription created successfully")
+    }
+
+    func unregisterSubscriptions() async throws {
+        let subscriptionID = Self.subscriptionID
+
+        do {
+            try await privateDatabase.deleteSubscription(withID: subscriptionID)
+            NSLog("CloudKitManager: Subscription deleted")
+        } catch let error as CKError where error.code == .unknownItem {
+            NSLog("CloudKitManager: Subscription already deleted")
+        }
+    }
 }
 
 // MARK: - Errors
@@ -136,4 +195,9 @@ enum CloudKitError: Error, LocalizedError {
             return "Sync failed: \(message)"
         }
     }
+}
+
+extension CloudKitManager: CloudKitManagerProtocol {
+    var accountStatusPublisher: Published<CKAccountStatus>.Publisher { $accountStatus }
+    var isZoneReadyPublisher: Published<Bool>.Publisher { $isZoneReady }
 }

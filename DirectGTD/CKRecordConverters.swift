@@ -18,7 +18,7 @@ enum CKRecordConverters {
 
     /// Decode system fields from Data to recreate a CKRecord with proper change tag
     /// Returns nil if data is nil or decoding fails
-    static func decodeSystemFields(_ data: Data?, manager: CloudKitManager = .shared) -> CKRecord? {
+    static func decodeSystemFields(_ data: Data?, manager: CloudKitManagerProtocol = CloudKitManager.shared) -> CKRecord? {
         guard let data = data else { return nil }
 
         do {
@@ -35,11 +35,18 @@ enum CKRecordConverters {
         }
     }
 
+    /// Normalize parent IDs so empty strings (or whitespace-only values) are treated as nil.
+    private static func normalizeParentId(_ parentId: String?) -> String? {
+        guard let parentId = parentId else { return nil }
+        let trimmed = parentId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     // MARK: - Item
 
     /// Convert Item to CKRecord for push.
     /// If ckSystemFields exists, restores the record from it to preserve change tag.
-    static func record(from item: Item, manager: CloudKitManager = .shared) -> CKRecord {
+    static func record(from item: Item, manager: CloudKitManagerProtocol = CloudKitManager.shared) -> CKRecord {
         let record: CKRecord
 
         // Try to restore from system fields first (for updates)
@@ -56,7 +63,7 @@ enum CKRecordConverters {
         record["title"] = item.title as CKRecordValue?
         record["itemType"] = item.itemType.rawValue as CKRecordValue
         record["notes"] = item.notes as CKRecordValue?
-        record["parentId"] = item.parentId as CKRecordValue?
+        record["parentId"] = normalizeParentId(item.parentId) as CKRecordValue?
         record["sortOrder"] = item.sortOrder as CKRecordValue
         record["createdAt"] = item.createdAt as CKRecordValue
         record["modifiedAt"] = item.modifiedAt as CKRecordValue
@@ -84,7 +91,7 @@ enum CKRecordConverters {
             title: record["title"] as? String,
             itemType: itemType,
             notes: record["notes"] as? String,
-            parentId: record["parentId"] as? String,
+            parentId: normalizeParentId(record["parentId"] as? String),
             sortOrder: record["sortOrder"] as? Int ?? 0,
             createdAt: record["createdAt"] as? Int ?? Int(Date().timeIntervalSince1970),
             modifiedAt: record["modifiedAt"] as? Int ?? Int(Date().timeIntervalSince1970),
@@ -102,7 +109,7 @@ enum CKRecordConverters {
     // MARK: - Tag
 
     /// Convert Tag to CKRecord for push.
-    static func record(from tag: Tag, manager: CloudKitManager = .shared) -> CKRecord {
+    static func record(from tag: Tag, manager: CloudKitManagerProtocol = CloudKitManager.shared) -> CKRecord {
         let record: CKRecord
 
         if let existingRecord = decodeSystemFields(tag.ckSystemFields, manager: manager) {
@@ -147,7 +154,7 @@ enum CKRecordConverters {
     // MARK: - ItemTag
 
     /// Convert ItemTag to CKRecord for push.
-    static func record(from itemTag: ItemTag, manager: CloudKitManager = .shared) -> CKRecord {
+    static func record(from itemTag: ItemTag, manager: CloudKitManagerProtocol = CloudKitManager.shared) -> CKRecord {
         let record: CKRecord
 
         if let existingRecord = decodeSystemFields(itemTag.ckSystemFields, manager: manager) {
@@ -190,7 +197,7 @@ enum CKRecordConverters {
     // MARK: - TimeEntry
 
     /// Convert TimeEntry to CKRecord for push.
-    static func record(from timeEntry: TimeEntry, manager: CloudKitManager = .shared) -> CKRecord {
+    static func record(from timeEntry: TimeEntry, manager: CloudKitManagerProtocol = CloudKitManager.shared) -> CKRecord {
         let record: CKRecord
 
         if let existingRecord = decodeSystemFields(timeEntry.ckSystemFields, manager: manager) {
@@ -238,7 +245,7 @@ enum CKRecordConverters {
     // MARK: - SavedSearch
 
     /// Convert SavedSearch to CKRecord for push.
-    static func record(from savedSearch: SavedSearch, manager: CloudKitManager = .shared) -> CKRecord {
+    static func record(from savedSearch: SavedSearch, manager: CloudKitManagerProtocol = CloudKitManager.shared) -> CKRecord {
         let record: CKRecord
 
         if let existingRecord = decodeSystemFields(savedSearch.ckSystemFields, manager: manager) {

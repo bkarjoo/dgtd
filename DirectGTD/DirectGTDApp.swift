@@ -12,6 +12,9 @@ import SwiftUI
 struct DirectGTDApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var syncEngine = SyncEngine()
+    @StateObject private var settings = UserSettings()
+    @StateObject private var store: ItemStore
+    private var apiServer: APIServer?
 
     init() {
         NSLog("DirectGTDApp: Program started")
@@ -26,11 +29,27 @@ struct DirectGTDApp: App {
         // Start automatic backups (checks on launch + 24-hour timer)
         BackupService.shared.startAutomaticBackups()
         NSLog("DirectGTDApp: Backup service started")
+
+        // Create shared settings and store
+        let sharedSettings = UserSettings()
+        let sharedStore = ItemStore(settings: sharedSettings)
+        _settings = StateObject(wrappedValue: sharedSettings)
+        _store = StateObject(wrappedValue: sharedStore)
+
+        // Start API server
+        let server = APIServer(itemStore: sharedStore, port: 9876)
+        do {
+            try server.start()
+            NSLog("DirectGTDApp: API server started on port 9876")
+        } catch {
+            NSLog("DirectGTDApp: Failed to start API server - \(error)")
+        }
+        apiServer = server
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView(syncEngine: syncEngine)
+            ContentView(store: store, settings: settings, syncEngine: syncEngine)
                 .onAppear {
                     // Wire up the sync engine to the app delegate for remote notifications
                     appDelegate.syncEngine = syncEngine

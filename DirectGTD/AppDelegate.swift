@@ -1,14 +1,9 @@
+#if os(macOS)
 import DirectGTDCore
-//
-//  AppDelegate.swift
-//  DirectGTD
-//
-//  Handles remote notifications for CloudKit sync.
-//
-
 import Cocoa
 import CloudKit
 
+/// macOS AppDelegate handles push notifications for CloudKit sync.
 class AppDelegate: NSObject, NSApplicationDelegate {
     weak var syncEngine: SyncEngine?
 
@@ -47,3 +42,4 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
+#endif
