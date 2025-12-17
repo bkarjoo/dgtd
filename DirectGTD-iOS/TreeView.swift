@@ -65,16 +65,27 @@ struct TreeView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(viewModel.displayItems, id: \.id) { item in
-                            renderItemAndChildren(item: item, depth: 0)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(viewModel.displayItems, id: \.id) { item in
+                                renderItemAndChildren(item: item, depth: 0)
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    .refreshable {
+                        await viewModel.syncAndReload()
+                    }
+                    .onChange(of: viewModel.selectedItemId) { oldValue, newValue in
+                        if let itemId = newValue {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                withAnimation {
+                                    proxy.scrollTo(itemId, anchor: .center)
+                                }
+                            }
                         }
                     }
-                    .padding(.horizontal)
-                }
-                .refreshable {
-                    await viewModel.syncAndReload()
                 }
             }
         }
@@ -353,6 +364,11 @@ class TreeViewModel: ObservableObject {
     @Published var editingNoteId: String?  // When set, show note editor
     @Published var isLoading: Bool = false
     @Published var syncError: String?
+
+    var inboxFolderId: String? {
+        let repository = ItemRepository()
+        return try? repository.getSetting(key: "quick_capture_folder_id")
+    }
 
     private let syncEngine = SyncEngine()
     private var hasLoadedInitially = false

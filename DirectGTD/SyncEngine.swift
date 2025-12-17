@@ -270,6 +270,16 @@ class SyncEngine: ObservableObject {
                 status = .error(error.localizedDescription)
             }
             NSLog("SyncEngine: Sync failed (non-retryable or max attempts reached) - \(error)")
+
+            // Auto-dismiss error after 10 seconds
+            Task {
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
+                await MainActor.run {
+                    if case .error = status {
+                        status = .idle
+                    }
+                }
+            }
         }
     }
 
@@ -286,6 +296,12 @@ class SyncEngine: ObservableObject {
         // Network errors are retryable
         if (error as NSError).domain == NSURLErrorDomain {
             return true
+        }
+        // Timeout errors (from our own timeout logic) are retryable
+        if let cloudKitError = error as? CloudKitError {
+            if case .syncFailed(let message) = cloudKitError, message.contains("timed out") {
+                return true
+            }
         }
         return false
     }
@@ -756,7 +772,7 @@ class SyncEngine: ObservableObject {
         NSLog("SyncEngine: Push complete - saved: \(totalSaved), deleted: \(totalDeleted), conflicts: \(totalConflicts)")
     }
 
-    /// Perform a single batch operation (up to 400 records)
+    /// Perform a single batch operation (up to 400 records) with timeout
     private func performSingleBatchOperation(recordsToSave: [CKRecord],
                                              recordIDsToDelete: [CKRecord.ID],
                                              dbQueue: DatabaseQueue) async throws -> BatchModifyResult {
@@ -764,53 +780,73 @@ class SyncEngine: ObservableObject {
         operation.savePolicy = .ifServerRecordUnchanged
         operation.isAtomic = false  // Allow partial success
 
-        // Use continuation to wait for operation completion
-        let result: BatchModifyResult = try await withCheckedThrowingContinuation { continuation in
-            var batchResult = BatchModifyResult()
+        // Set timeout for the operation (30 seconds)
+        let timeoutSeconds: UInt64 = 30
 
-            operation.perRecordSaveBlock = { recordID, result in
-                switch result {
-                case .success(let record):
-                    batchResult.savedRecords.append(record)
-                case .failure(let error):
-                    if let ckError = error as? CKError, ckError.code == .serverRecordChanged {
-                        batchResult.conflictErrors.append((recordID, ckError))
-                    } else {
-                        NSLog("SyncEngine: Failed to save record \(recordID.recordName): \(error)")
+        // Use task group for timeout support
+        let result: BatchModifyResult = try await withThrowingTaskGroup(of: BatchModifyResult.self) { group in
+            // Main CloudKit operation task
+            group.addTask {
+                try await withCheckedThrowingContinuation { continuation in
+                    var batchResult = BatchModifyResult()
+
+                    operation.perRecordSaveBlock = { recordID, result in
+                        switch result {
+                        case .success(let record):
+                            batchResult.savedRecords.append(record)
+                        case .failure(let error):
+                            if let ckError = error as? CKError, ckError.code == .serverRecordChanged {
+                                batchResult.conflictErrors.append((recordID, ckError))
+                            } else {
+                                NSLog("SyncEngine: Failed to save record \(recordID.recordName): \(error)")
+                            }
+                        }
                     }
+
+                    operation.perRecordDeleteBlock = { recordID, result in
+                        switch result {
+                        case .success:
+                            batchResult.deletedRecordIDs.append(recordID)
+                        case .failure(let error):
+                            // Ignore "not found" errors for deletes
+                            if let ckError = error as? CKError, ckError.code == .unknownItem {
+                                batchResult.deletedRecordIDs.append(recordID)  // Consider it deleted
+                            } else {
+                                NSLog("SyncEngine: Failed to delete record \(recordID.recordName): \(error)")
+                            }
+                        }
+                    }
+
+                    operation.modifyRecordsResultBlock = { result in
+                        switch result {
+                        case .success:
+                            continuation.resume(returning: batchResult)
+                        case .failure(let error):
+                            // Check if it's a partial failure - we still want to process successful records
+                            if let ckError = error as? CKError, ckError.code == .partialFailure {
+                                // Partial failure is expected when some records fail - continue with what succeeded
+                                continuation.resume(returning: batchResult)
+                            } else {
+                                continuation.resume(throwing: error)
+                            }
+                        }
+                    }
+
+                    self.cloudKitManager.privateDatabase.add(operation)
                 }
             }
 
-            operation.perRecordDeleteBlock = { recordID, result in
-                switch result {
-                case .success:
-                    batchResult.deletedRecordIDs.append(recordID)
-                case .failure(let error):
-                    // Ignore "not found" errors for deletes
-                    if let ckError = error as? CKError, ckError.code == .unknownItem {
-                        batchResult.deletedRecordIDs.append(recordID)  // Consider it deleted
-                    } else {
-                        NSLog("SyncEngine: Failed to delete record \(recordID.recordName): \(error)")
-                    }
-                }
+            // Timeout task
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeoutSeconds * 1_000_000_000)
+                operation.cancel()
+                throw CloudKitError.syncFailed("CloudKit operation timed out after \(timeoutSeconds) seconds")
             }
 
-            operation.modifyRecordsResultBlock = { result in
-                switch result {
-                case .success:
-                    continuation.resume(returning: batchResult)
-                case .failure(let error):
-                    // Check if it's a partial failure - we still want to process successful records
-                    if let ckError = error as? CKError, ckError.code == .partialFailure {
-                        // Partial failure is expected when some records fail - continue with what succeeded
-                        continuation.resume(returning: batchResult)
-                    } else {
-                        continuation.resume(throwing: error)
-                    }
-                }
-            }
-
-            self.cloudKitManager.privateDatabase.add(operation)
+            // Return first completed result (either success or timeout)
+            let firstResult = try await group.next()!
+            group.cancelAll()
+            return firstResult
         }
 
         return result
@@ -874,7 +910,7 @@ class SyncEngine: ObservableObject {
         return totalChanged + totalDeleted
     }
 
-    /// Fetch a single batch of zone changes
+    /// Fetch a single batch of zone changes with timeout
     private func fetchZoneChanges(changeToken: CKServerChangeToken?) async throws -> ZoneFetchResult {
         NSLog("SyncEngine: Starting zone fetch (hasToken=\(changeToken != nil))")
 
@@ -887,54 +923,72 @@ class SyncEngine: ObservableObject {
         )
         operation.qualityOfService = .userInitiated
 
-        return try await withCheckedThrowingContinuation { continuation in
-            var fetchResult = ZoneFetchResult()
-            var operationError: Error?
-            var recordCount = 0
+        // Set timeout for the operation (30 seconds)
+        let timeoutSeconds: UInt64 = 30
 
-            operation.recordWasChangedBlock = { _, result in
-                switch result {
-                case .success(let record):
-                    fetchResult.changedRecords.append(record)
-                    recordCount += 1
-                case .failure(let error):
-                    NSLog("SyncEngine: Error fetching record: \(error)")
+        return try await withThrowingTaskGroup(of: ZoneFetchResult.self) { group in
+            // Main fetch task
+            group.addTask {
+                try await withCheckedThrowingContinuation { continuation in
+                    var fetchResult = ZoneFetchResult()
+                    var operationError: Error?
+
+                    operation.recordWasChangedBlock = { _, result in
+                        switch result {
+                        case .success(let record):
+                            fetchResult.changedRecords.append(record)
+                        case .failure(let error):
+                            NSLog("SyncEngine: Error fetching record: \(error)")
+                        }
+                    }
+
+                    operation.recordWithIDWasDeletedBlock = { recordID, recordType in
+                        fetchResult.deletedRecordIDs.append((recordID, recordType))
+                    }
+
+                    operation.recordZoneChangeTokensUpdatedBlock = { _, token, _ in
+                        fetchResult.newChangeToken = token
+                    }
+
+                    operation.recordZoneFetchResultBlock = { [zoneID = self.cloudKitManager.zoneID] fetchedZoneID, result in
+                        guard fetchedZoneID == zoneID else { return }
+
+                        switch result {
+                        case .success(let (token, _, moreComing)):
+                            fetchResult.newChangeToken = token
+                            fetchResult.moreComing = moreComing
+                            NSLog("SyncEngine: Zone fetch result - changed=\(fetchResult.changedRecords.count), deleted=\(fetchResult.deletedRecordIDs.count), moreComing=\(moreComing)")
+                        case .failure(let error):
+                            NSLog("SyncEngine: Zone fetch error: \(error)")
+                            operationError = error
+                        }
+                    }
+
+                    operation.fetchRecordZoneChangesResultBlock = { result in
+                        NSLog("SyncEngine: Fetch operation completed")
+                        switch result {
+                        case .success:
+                            continuation.resume(returning: fetchResult)
+                        case .failure(let error):
+                            continuation.resume(throwing: operationError ?? error)
+                        }
+                    }
+
+                    self.cloudKitManager.privateDatabase.add(operation)
                 }
             }
 
-            operation.recordWithIDWasDeletedBlock = { recordID, recordType in
-                fetchResult.deletedRecordIDs.append((recordID, recordType))
+            // Timeout task
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeoutSeconds * 1_000_000_000)
+                operation.cancel()
+                throw CloudKitError.syncFailed("CloudKit fetch timed out after \(timeoutSeconds) seconds")
             }
 
-            operation.recordZoneChangeTokensUpdatedBlock = { _, token, _ in
-                fetchResult.newChangeToken = token
-            }
-
-            operation.recordZoneFetchResultBlock = { [zoneID = self.cloudKitManager.zoneID] fetchedZoneID, result in
-                guard fetchedZoneID == zoneID else { return }
-
-                switch result {
-                case .success(let (token, _, moreComing)):
-                    fetchResult.newChangeToken = token
-                    fetchResult.moreComing = moreComing
-                    NSLog("SyncEngine: Zone fetch result - changed=\(fetchResult.changedRecords.count), deleted=\(fetchResult.deletedRecordIDs.count), moreComing=\(moreComing)")
-                case .failure(let error):
-                    NSLog("SyncEngine: Zone fetch error: \(error)")
-                    operationError = error
-                }
-            }
-
-            operation.fetchRecordZoneChangesResultBlock = { result in
-                NSLog("SyncEngine: Fetch operation completed")
-                switch result {
-                case .success:
-                    continuation.resume(returning: fetchResult)
-                case .failure(let error):
-                    continuation.resume(throwing: operationError ?? error)
-                }
-            }
-
-            self.cloudKitManager.privateDatabase.add(operation)
+            // Return first completed result
+            let firstResult = try await group.next()!
+            group.cancelAll()
+            return firstResult
         }
     }
 

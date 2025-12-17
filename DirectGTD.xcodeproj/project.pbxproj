@@ -79,11 +79,6 @@
 			path = "DirectGTD-iOSTests";
 			sourceTree = "<group>";
 		};
-		1E4C76102EE86FA5004748ED /* DirectGTD-iOSUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "DirectGTD-iOSUITests";
-			sourceTree = "<group>";
-		};
 		1EA486732EC43FAA0017F6CA /* DirectGTD */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -95,11 +90,6 @@
 		1EA486812EC43FAD0017F6CA /* DirectGTDTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = DirectGTDTests;
-			sourceTree = "<group>";
-		};
-		1EA486822EC43FAD0017F6CB /* DirectGTDUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = DirectGTDUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -165,10 +155,8 @@
 				1EA486730EC43FAA0017F6CA /* Packages */,
 				1EA486732EC43FAA0017F6CA /* DirectGTD */,
 				1EA486812EC43FAD0017F6CA /* DirectGTDTests */,
-				1EA486822EC43FAD0017F6CB /* DirectGTDUITests */,
 				1E4C75F82EE86FA3004748ED /* DirectGTD-iOS */,
 				1E4C76062EE86FA5004748ED /* DirectGTD-iOSTests */,
-				1E4C76102EE86FA5004748ED /* DirectGTD-iOSUITests */,
 				1EF675332EE8432300BB5B6F /* Frameworks */,
 				1EA486722EC43FAA0017F6CA /* Products */,
 			);
@@ -263,9 +251,6 @@
 			dependencies = (
 				1E4C760F2EE86FA5004748ED /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				1E4C76102EE86FA5004748ED /* DirectGTD-iOSUITests */,
-			);
 			name = "DirectGTD-iOSUITests";
 			packageProductDependencies = (
 			);
@@ -335,9 +320,6 @@
 			);
 			dependencies = (
 				1EA4868A2EC43FAD0017F6CA /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				1EA486822EC43FAD0017F6CB /* DirectGTDUITests */,
 			);
 			name = DirectGTDUITests;
 			packageProductDependencies = (

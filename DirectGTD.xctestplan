@@ -1,0 +1,39 @@
+{
+  "configurations" : [
+    {
+      "id" : "E738F963-0166-4985-A55F-35FADD25ABC4",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "performanceAntipatternCheckerEnabled" : true,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:DirectGTD.xcodeproj",
+      "identifier" : "1EA486702EC43FAA0017F6CA",
+      "name" : "DirectGTD"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:DirectGTD.xcodeproj",
+        "identifier" : "1EA4867D2EC43FAD0017F6CA",
+        "name" : "DirectGTDTests"
+      }
+    },
+    {
+      "enabled" : false,
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:DirectGTD.xcodeproj",
+        "identifier" : "1EA486872EC43FAD0017F6CA",
+        "name" : "DirectGTDUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

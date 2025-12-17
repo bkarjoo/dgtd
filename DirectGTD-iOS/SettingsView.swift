@@ -39,6 +39,34 @@ struct SettingsView: View {
                 Section("About") {
                     Text("Version 1.0")
                 }
+
+                Section("Debug") {
+                    HStack {
+                        Text("Selected Item ID")
+                        Spacer()
+                        if let selectedId = viewModel.selectedItemId {
+                            Text(selectedId)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                        } else {
+                            Text("None")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    HStack {
+                        Text("Inbox Folder ID")
+                        Spacer()
+                        if let inboxId = viewModel.inboxFolderId {
+                            Text(inboxId)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                        } else {
+                            Text("Not set")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
             }
             .navigationTitle("Settings")
             .toolbar {

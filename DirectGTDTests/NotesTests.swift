@@ -67,6 +67,9 @@ final class NotesTests: XCTestCase {
         let originalItem = try repository.getItem(id: item.id)
         let originalModifiedAt = originalItem!.modifiedAt
 
+        // Wait 1 second to ensure different timestamp (second precision)
+        Thread.sleep(forTimeInterval: 1.0)
+
         // When: Updating notes
         itemStore.updateNotes(id: item.id, notes: "Updated notes")
 

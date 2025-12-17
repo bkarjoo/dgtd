@@ -238,12 +238,14 @@ class ItemStoreQueryTests: XCTestCase {
 
     func testGetItemsDueThisWeek_ReturnsWeekItems() {
         let calendar = Calendar.current
-        let today = Date()
-        let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today))!
+        let now = Date()
+        let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now))!
         let startOfWeekTimestamp = Int(startOfWeek.timeIntervalSince1970)
         let endOfWeekTimestamp = startOfWeekTimestamp + (7 * 86400)
 
-        let thisWeekItem = createTestItem(title: "This Week", dueDate: startOfWeekTimestamp + (3 * 86400))
+        // Use "now + 1 hour" to ensure item is in the future (implementation filters from now, not start of week)
+        let nowTimestamp = Int(now.timeIntervalSince1970)
+        let thisWeekItem = createTestItem(title: "This Week", dueDate: nowTimestamp + 3600)
         let nextWeekItem = createTestItem(title: "Next Week", dueDate: endOfWeekTimestamp + 86400)
         let lastWeekItem = createTestItem(title: "Last Week", dueDate: startOfWeekTimestamp - 86400)
 

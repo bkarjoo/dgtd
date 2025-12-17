@@ -93,7 +93,7 @@ final class BackupServiceTests: XCTestCase {
 
         // Create multiple backups
         backupService.performBackup()
-        Thread.sleep(forTimeInterval: 0.1) // Ensure different timestamps
+        Thread.sleep(forTimeInterval: 1.0) // Ensure different timestamps (filename has second precision)
 
         try dbQueue.write { db in
             try db.execute(sql: "INSERT INTO items (id, created_at, modified_at) VALUES ('item2', 2, 2)")
@@ -146,11 +146,11 @@ final class BackupServiceTests: XCTestCase {
     }
 
     func testDeleteMultipleBackupsKeepsOthers() throws {
-        // Create three backups
+        // Create three backups (sleep 1s between to ensure different filenames - second precision)
         backupService.performBackup()
-        Thread.sleep(forTimeInterval: 0.1)
+        Thread.sleep(forTimeInterval: 1.0)
         backupService.performBackup()
-        Thread.sleep(forTimeInterval: 0.1)
+        Thread.sleep(forTimeInterval: 1.0)
         backupService.performBackup()
 
         var backups = backupService.listBackups()

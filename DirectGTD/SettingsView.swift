@@ -131,9 +131,9 @@ struct SettingsView: View {
                 .disabled(isSyncing)
             }
 
-            Section("Debug (Temporary)") {
+            Section("Debug") {
                 HStack {
-                    Text("Selected Item ID:")
+                    Text("Selected Item ID")
                     Spacer()
                     if let selectedId = store.selectedItemId {
                         Text(selectedId)
@@ -141,6 +141,19 @@ struct SettingsView: View {
                             .textSelection(.enabled)
                     } else {
                         Text("None")
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                HStack {
+                    Text("Inbox Folder ID")
+                    Spacer()
+                    if let inboxId = quickCaptureFolderId {
+                        Text(inboxId)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                    } else {
+                        Text("Not set")
                             .foregroundColor(.secondary)
                     }
                 }
