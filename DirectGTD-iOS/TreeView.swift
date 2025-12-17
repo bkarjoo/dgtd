@@ -366,11 +366,11 @@ class TreeViewModel: ObservableObject {
     @Published var syncError: String?
 
     var inboxFolderId: String? {
-        let repository = ItemRepository()
+        let repository = ItemRepository(database: Database.shared)
         return try? repository.getSetting(key: "quick_capture_folder_id")
     }
 
-    private let syncEngine = SyncEngine()
+    private let syncEngine = SyncEngine(cloudKitManager: CloudKitManager.shared, database: Database.shared)
     private var hasLoadedInitially = false
     private var observationCancellable: AnyDatabaseCancellable?
 
@@ -702,7 +702,8 @@ class TreeViewModel: ObservableObject {
     /// Load items from local database
     func loadFromDatabase() {
         do {
-            items = try syncEngine.getAllItems()
+            let repository = ItemRepository(database: Database.shared)
+            items = try repository.getAllItems()
             NSLog("TreeViewModel: Loaded \(items.count) items from database")
 
             // Auto-expand root level folders only on first load
@@ -725,7 +726,11 @@ class TreeViewModel: ObservableObject {
             syncError = nil
         }
 
-        await syncEngine.sync()
+        do {
+            try await syncEngine.sync()
+        } catch {
+            NSLog("TreeViewModel: Sync failed - \(error)")
+        }
 
         await MainActor.run {
             loadFromDatabase()
@@ -746,7 +751,11 @@ class TreeViewModel: ObservableObject {
             hasLoadedInitially = false
         }
 
-        await syncEngine.resetSync()
+        do {
+            try await syncEngine.resetSyncState()
+        } catch {
+            NSLog("TreeViewModel: Reset sync failed - \(error)")
+        }
 
         await MainActor.run {
             loadFromDatabase()

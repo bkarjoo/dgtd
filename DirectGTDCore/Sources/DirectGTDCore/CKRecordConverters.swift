@@ -1,27 +1,30 @@
 //
 //  CKRecordConverters.swift
-//  DirectGTD-iOS
+//  DirectGTDCore
 //
-//  Created by Behrooz Karjoo on 12/9/25.
+//  Converts between local models and CKRecords for CloudKit sync.
 //
 
-import DirectGTDCore
 import Foundation
 import CloudKit
 
 /// Converts between local models and CKRecords for CloudKit sync.
-enum CKRecordConverters {
+/// Handles system field encoding/decoding to preserve change tags for updates.
+public enum CKRecordConverters {
 
     // MARK: - System Fields Helpers
 
-    static func encodeSystemFields(_ record: CKRecord) -> Data {
+    /// Encode CKRecord system fields to Data for storage
+    public static func encodeSystemFields(_ record: CKRecord) -> Data {
         let archiver = NSKeyedArchiver(requiringSecureCoding: true)
         record.encodeSystemFields(with: archiver)
         archiver.finishEncoding()
         return archiver.encodedData
     }
 
-    static func decodeSystemFields(_ data: Data?, manager: CloudKitManagerProtocol = CloudKitManager.shared) -> CKRecord? {
+    /// Decode system fields from Data to recreate a CKRecord with proper change tag
+    /// Returns nil if data is nil or decoding fails
+    public static func decodeSystemFields(_ data: Data?, manager: CloudKitManagerProtocol) -> CKRecord? {
         guard let data = data else { return nil }
 
         do {
@@ -38,7 +41,7 @@ enum CKRecordConverters {
         }
     }
 
-    /// Normalize parent IDs so blank/whitespace-only strings are treated as nil.
+    /// Normalize parent IDs so empty strings (or whitespace-only values) are treated as nil.
     private static func normalizeParentId(_ parentId: String?) -> String? {
         guard let parentId = parentId else { return nil }
         let trimmed = parentId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -48,7 +51,8 @@ enum CKRecordConverters {
     // MARK: - Item
 
     /// Convert Item to CKRecord for push.
-    static func record(from item: Item, manager: CloudKitManagerProtocol = CloudKitManager.shared) -> CKRecord {
+    /// If ckSystemFields exists, restores the record from it to preserve change tag.
+    public static func record(from item: Item, manager: CloudKitManagerProtocol) -> CKRecord {
         let record: CKRecord
 
         // Try to restore from system fields first (for updates)
@@ -57,7 +61,7 @@ enum CKRecordConverters {
         } else {
             // New record - create fresh
             let recordName = item.ckRecordName ?? "Item_\(item.id)"
-            record = manager.newRecord(type: CloudKitManager.RecordType.item, recordName: recordName)
+            record = manager.newRecord(type: CloudKitRecordType.item, recordName: recordName)
         }
 
         // Set/update all field values
@@ -77,8 +81,10 @@ enum CKRecordConverters {
         return record
     }
 
-    static func item(from record: CKRecord) -> Item? {
-        guard record.recordType == CloudKitManager.RecordType.item,
+    /// Convert CKRecord to Item (from pull).
+    /// Encodes system fields for future updates.
+    public static func item(from record: CKRecord) -> Item? {
+        guard record.recordType == CloudKitRecordType.item,
               let localId = record["localId"] as? String else {
             return nil
         }
@@ -101,7 +107,7 @@ enum CKRecordConverters {
             ckRecordName: record.recordID.recordName,
             ckChangeTag: record.recordChangeTag,
             ckSystemFields: encodeSystemFields(record),
-            needsPush: 0,
+            needsPush: 0,  // Just pulled from server
             deletedAt: record["deletedAt"] as? Int
         )
     }
@@ -109,14 +115,14 @@ enum CKRecordConverters {
     // MARK: - Tag
 
     /// Convert Tag to CKRecord for push.
-    static func record(from tag: Tag, manager: CloudKitManagerProtocol = CloudKitManager.shared) -> CKRecord {
+    public static func record(from tag: Tag, manager: CloudKitManagerProtocol) -> CKRecord {
         let record: CKRecord
 
         if let existingRecord = decodeSystemFields(tag.ckSystemFields, manager: manager) {
             record = existingRecord
         } else {
             let recordName = tag.ckRecordName ?? "Tag_\(tag.id)"
-            record = manager.newRecord(type: CloudKitManager.RecordType.tag, recordName: recordName)
+            record = manager.newRecord(type: CloudKitRecordType.tag, recordName: recordName)
         }
 
         record["localId"] = tag.id as CKRecordValue
@@ -129,8 +135,9 @@ enum CKRecordConverters {
         return record
     }
 
-    static func tag(from record: CKRecord) -> Tag? {
-        guard record.recordType == CloudKitManager.RecordType.tag,
+    /// Convert CKRecord to Tag (from pull).
+    public static func tag(from record: CKRecord) -> Tag? {
+        guard record.recordType == CloudKitRecordType.tag,
               let localId = record["localId"] as? String,
               let name = record["name"] as? String else {
             return nil
@@ -153,14 +160,14 @@ enum CKRecordConverters {
     // MARK: - ItemTag
 
     /// Convert ItemTag to CKRecord for push.
-    static func record(from itemTag: ItemTag, manager: CloudKitManagerProtocol = CloudKitManager.shared) -> CKRecord {
+    public static func record(from itemTag: ItemTag, manager: CloudKitManagerProtocol) -> CKRecord {
         let record: CKRecord
 
         if let existingRecord = decodeSystemFields(itemTag.ckSystemFields, manager: manager) {
             record = existingRecord
         } else {
             let recordName = itemTag.ckRecordName ?? "ItemTag_\(itemTag.itemId)_\(itemTag.tagId)"
-            record = manager.newRecord(type: CloudKitManager.RecordType.itemTag, recordName: recordName)
+            record = manager.newRecord(type: CloudKitRecordType.itemTag, recordName: recordName)
         }
 
         record["itemId"] = itemTag.itemId as CKRecordValue
@@ -172,8 +179,9 @@ enum CKRecordConverters {
         return record
     }
 
-    static func itemTag(from record: CKRecord) -> ItemTag? {
-        guard record.recordType == CloudKitManager.RecordType.itemTag,
+    /// Convert CKRecord to ItemTag (from pull).
+    public static func itemTag(from record: CKRecord) -> ItemTag? {
+        guard record.recordType == CloudKitRecordType.itemTag,
               let itemId = record["itemId"] as? String,
               let tagId = record["tagId"] as? String else {
             return nil
@@ -195,14 +203,14 @@ enum CKRecordConverters {
     // MARK: - TimeEntry
 
     /// Convert TimeEntry to CKRecord for push.
-    static func record(from timeEntry: TimeEntry, manager: CloudKitManagerProtocol = CloudKitManager.shared) -> CKRecord {
+    public static func record(from timeEntry: TimeEntry, manager: CloudKitManagerProtocol) -> CKRecord {
         let record: CKRecord
 
         if let existingRecord = decodeSystemFields(timeEntry.ckSystemFields, manager: manager) {
             record = existingRecord
         } else {
             let recordName = timeEntry.ckRecordName ?? "TimeEntry_\(timeEntry.id)"
-            record = manager.newRecord(type: CloudKitManager.RecordType.timeEntry, recordName: recordName)
+            record = manager.newRecord(type: CloudKitRecordType.timeEntry, recordName: recordName)
         }
 
         record["localId"] = timeEntry.id as CKRecordValue
@@ -216,8 +224,9 @@ enum CKRecordConverters {
         return record
     }
 
-    static func timeEntry(from record: CKRecord) -> TimeEntry? {
-        guard record.recordType == CloudKitManager.RecordType.timeEntry,
+    /// Convert CKRecord to TimeEntry (from pull).
+    public static func timeEntry(from record: CKRecord) -> TimeEntry? {
+        guard record.recordType == CloudKitRecordType.timeEntry,
               let localId = record["localId"] as? String,
               let itemId = record["itemId"] as? String,
               let startedAt = record["startedAt"] as? Int else {
@@ -242,14 +251,14 @@ enum CKRecordConverters {
     // MARK: - SavedSearch
 
     /// Convert SavedSearch to CKRecord for push.
-    static func record(from savedSearch: SavedSearch, manager: CloudKitManagerProtocol = CloudKitManager.shared) -> CKRecord {
+    public static func record(from savedSearch: SavedSearch, manager: CloudKitManagerProtocol) -> CKRecord {
         let record: CKRecord
 
         if let existingRecord = decodeSystemFields(savedSearch.ckSystemFields, manager: manager) {
             record = existingRecord
         } else {
             let recordName = savedSearch.ckRecordName ?? "SavedSearch_\(savedSearch.id)"
-            record = manager.newRecord(type: CloudKitManager.RecordType.savedSearch, recordName: recordName)
+            record = manager.newRecord(type: CloudKitRecordType.savedSearch, recordName: recordName)
         }
 
         record["localId"] = savedSearch.id as CKRecordValue
@@ -263,8 +272,9 @@ enum CKRecordConverters {
         return record
     }
 
-    static func savedSearch(from record: CKRecord) -> SavedSearch? {
-        guard record.recordType == CloudKitManager.RecordType.savedSearch,
+    /// Convert CKRecord to SavedSearch (from pull).
+    public static func savedSearch(from record: CKRecord) -> SavedSearch? {
+        guard record.recordType == CloudKitRecordType.savedSearch,
               let localId = record["localId"] as? String,
               let name = record["name"] as? String,
               let sql = record["sql"] as? String else {
@@ -284,5 +294,60 @@ enum CKRecordConverters {
             needsPush: 0,
             deletedAt: record["deletedAt"] as? Int
         )
+    }
+
+    // MARK: - Helpers
+
+    /// Update an existing CKRecord with item data (for conflict resolution)
+    public static func update(record: CKRecord, with item: Item) {
+        record["localId"] = item.id as CKRecordValue
+        record["title"] = item.title as CKRecordValue?
+        record["itemType"] = item.itemType.rawValue as CKRecordValue
+        record["notes"] = item.notes as CKRecordValue?
+        record["parentId"] = item.parentId as CKRecordValue?
+        record["sortOrder"] = item.sortOrder as CKRecordValue
+        record["createdAt"] = item.createdAt as CKRecordValue
+        record["modifiedAt"] = item.modifiedAt as CKRecordValue
+        record["completedAt"] = item.completedAt as CKRecordValue?
+        record["dueDate"] = item.dueDate as CKRecordValue?
+        record["earliestStartTime"] = item.earliestStartTime as CKRecordValue?
+        record["deletedAt"] = item.deletedAt as CKRecordValue?
+    }
+
+    public static func update(record: CKRecord, with tag: Tag) {
+        record["localId"] = tag.id as CKRecordValue
+        record["name"] = tag.name as CKRecordValue
+        record["color"] = tag.color as CKRecordValue?
+        record["createdAt"] = tag.createdAt as CKRecordValue?
+        record["modifiedAt"] = tag.modifiedAt as CKRecordValue?
+        record["deletedAt"] = tag.deletedAt as CKRecordValue?
+    }
+
+    public static func update(record: CKRecord, with itemTag: ItemTag) {
+        record["itemId"] = itemTag.itemId as CKRecordValue
+        record["tagId"] = itemTag.tagId as CKRecordValue
+        record["createdAt"] = itemTag.createdAt as CKRecordValue?
+        record["modifiedAt"] = itemTag.modifiedAt as CKRecordValue?
+        record["deletedAt"] = itemTag.deletedAt as CKRecordValue?
+    }
+
+    public static func update(record: CKRecord, with timeEntry: TimeEntry) {
+        record["localId"] = timeEntry.id as CKRecordValue
+        record["itemId"] = timeEntry.itemId as CKRecordValue
+        record["startedAt"] = timeEntry.startedAt as CKRecordValue
+        record["endedAt"] = timeEntry.endedAt as CKRecordValue?
+        record["duration"] = timeEntry.duration as CKRecordValue?
+        record["modifiedAt"] = timeEntry.modifiedAt as CKRecordValue?
+        record["deletedAt"] = timeEntry.deletedAt as CKRecordValue?
+    }
+
+    public static func update(record: CKRecord, with savedSearch: SavedSearch) {
+        record["localId"] = savedSearch.id as CKRecordValue
+        record["name"] = savedSearch.name as CKRecordValue
+        record["sql"] = savedSearch.sql as CKRecordValue
+        record["sortOrder"] = savedSearch.sortOrder as CKRecordValue
+        record["createdAt"] = savedSearch.createdAt as CKRecordValue
+        record["modifiedAt"] = savedSearch.modifiedAt as CKRecordValue
+        record["deletedAt"] = savedSearch.deletedAt as CKRecordValue?
     }
 }

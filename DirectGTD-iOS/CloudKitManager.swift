@@ -10,29 +10,8 @@ import Foundation
 import CloudKit
 import Combine
 
-/// Protocol abstraction to allow dependency injection/mocking.
-protocol CloudKitManagerProtocol: AnyObject {
-    var zoneID: CKRecordZone.ID { get }
-    var container: CKContainer { get }
-    var privateDatabase: CKDatabase { get }
-    var accountStatus: CKAccountStatus { get }
-    var isZoneReady: Bool { get }
-    var accountStatusPublisher: Published<CKAccountStatus>.Publisher { get }
-    var isZoneReadyPublisher: Published<Bool>.Publisher { get }
-    var isAccountAvailable: Bool { get }
-
-    func checkAccountStatus() async throws -> CKAccountStatus
-    func ensureZoneExists() async throws
-    func initialize() async throws
-    func registerForSubscriptions() async throws
-    func unregisterSubscriptions() async throws
-
-    func recordID(for recordName: String) -> CKRecord.ID
-    func newRecord(type: String, recordName: String) -> CKRecord
-}
-
 /// Manages CloudKit container, zone setup, and account status for iOS.
-class CloudKitManager {
+class CloudKitManager: CloudKitManagerProtocol {
     static let shared = CloudKitManager()
 
     // Configuration - same as macOS
@@ -115,16 +94,6 @@ class CloudKitManager {
         NSLog("CloudKitManager: Initialization complete")
     }
 
-    // MARK: - Record Type Names
-
-    enum RecordType {
-        static let item = "Item"
-        static let tag = "Tag"
-        static let itemTag = "ItemTag"
-        static let timeEntry = "TimeEntry"
-        static let savedSearch = "SavedSearch"
-    }
-
     // MARK: - Helpers
 
     func recordID(for recordName: String) -> CKRecord.ID {
@@ -138,10 +107,8 @@ class CloudKitManager {
 
     // MARK: - Subscriptions
 
-    static let subscriptionID = "DirectGTD-zone-changes"
-
     func registerForSubscriptions() async throws {
-        let subscriptionID = Self.subscriptionID
+        let subscriptionID = CloudKitConfig.subscriptionID
 
         do {
             _ = try await privateDatabase.subscription(for: subscriptionID)
@@ -164,7 +131,7 @@ class CloudKitManager {
     }
 
     func unregisterSubscriptions() async throws {
-        let subscriptionID = Self.subscriptionID
+        let subscriptionID = CloudKitConfig.subscriptionID
 
         do {
             try await privateDatabase.deleteSubscription(withID: subscriptionID)
@@ -175,29 +142,9 @@ class CloudKitManager {
     }
 }
 
-// MARK: - Errors
+// MARK: - CloudKitManagerProtocol conformance
 
-enum CloudKitError: Error, LocalizedError {
-    case accountNotAvailable(String)
-    case zoneNotReady
-    case recordNotFound
-    case syncFailed(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .accountNotAvailable(let message):
-            return message
-        case .zoneNotReady:
-            return "CloudKit zone is not ready"
-        case .recordNotFound:
-            return "Record not found"
-        case .syncFailed(let message):
-            return "Sync failed: \(message)"
-        }
-    }
-}
-
-extension CloudKitManager: CloudKitManagerProtocol {
+extension CloudKitManager {
     var accountStatusPublisher: Published<CKAccountStatus>.Publisher { $accountStatus }
     var isZoneReadyPublisher: Published<Bool>.Publisher { $isZoneReady }
 }

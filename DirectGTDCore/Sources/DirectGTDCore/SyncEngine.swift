@@ -1,4 +1,10 @@
-import DirectGTDCore
+//
+//  SyncEngine.swift
+//  DirectGTDCore
+//
+//  Orchestrates push/pull sync operations with CloudKit.
+//
+
 import Foundation
 import CloudKit
 import GRDB
@@ -7,20 +13,20 @@ import Combine
 /// Orchestrates push/pull sync operations with CloudKit.
 /// Handles dirty tracking, batch uploads, change token management, conflict resolution,
 /// and automatic retry with exponential backoff.
-class SyncEngine: ObservableObject {
+public class SyncEngine: ObservableObject {
     private let cloudKitManager: CloudKitManagerProtocol
     private let database: DatabaseProvider
     private let metadataStore: SyncMetadataStore
 
     /// Sync status for UI
-    enum SyncStatus: Equatable {
+    public enum SyncStatus: Equatable {
         case disabled          // Sync not available (no iCloud account)
         case idle              // Ready to sync
         case syncing           // Sync in progress
         case initialSync(progress: Double, message: String)  // First-time sync with progress
         case error(String)     // Last sync failed
 
-        static func == (lhs: SyncStatus, rhs: SyncStatus) -> Bool {
+        public static func == (lhs: SyncStatus, rhs: SyncStatus) -> Bool {
             switch (lhs, rhs) {
             case (.disabled, .disabled), (.idle, .idle), (.syncing, .syncing):
                 return true
@@ -34,11 +40,11 @@ class SyncEngine: ObservableObject {
         }
     }
 
-    @Published private(set) var status: SyncStatus = .idle
-    @Published private(set) var lastSyncDate: Date?
-    @Published private(set) var iCloudAccountName: String?
-    @Published private(set) var isInitialSyncComplete: Bool = true
-    @Published var isSyncEnabled: Bool = true {
+    @Published public private(set) var status: SyncStatus = .idle
+    @Published public private(set) var lastSyncDate: Date?
+    @Published public private(set) var iCloudAccountName: String?
+    @Published public private(set) var isInitialSyncComplete: Bool = true
+    @Published public var isSyncEnabled: Bool = true {
         didSet {
             if oldValue != isSyncEnabled {
                 Task {
@@ -68,8 +74,8 @@ class SyncEngine: ObservableObject {
     private var periodicSyncTimer: Timer?
     private let periodicSyncInterval: TimeInterval = 5 * 60  // 5 minutes
 
-    init(cloudKitManager: CloudKitManagerProtocol = CloudKitManager.shared,
-         database: DatabaseProvider = Database.shared) {
+    public init(cloudKitManager: CloudKitManagerProtocol,
+                database: DatabaseProvider) {
         self.cloudKitManager = cloudKitManager
         self.database = database
 
@@ -100,7 +106,7 @@ class SyncEngine: ObservableObject {
     // MARK: - Public API
 
     /// Start sync engine - initialize CloudKit and register for notifications
-    func start() async {
+    public func start() async {
         guard isSyncEnabled else {
             await MainActor.run { status = .disabled }
             NSLog("SyncEngine: Sync disabled by user")
@@ -144,7 +150,7 @@ class SyncEngine: ObservableObject {
     }
 
     /// Stop sync engine
-    func stop() async {
+    public func stop() async {
         retryTask?.cancel()
         pendingSyncTask?.cancel()
         stopPeriodicSyncTimer()
@@ -159,7 +165,7 @@ class SyncEngine: ObservableObject {
     }
 
     /// Request a sync (debounced to avoid rapid-fire syncs)
-    func requestSync() {
+    public func requestSync() {
         pendingSyncTask?.cancel()
         pendingSyncTask = Task {
             try? await Task.sleep(nanoseconds: UInt64(syncDebounceInterval * 1_000_000_000))
@@ -177,13 +183,13 @@ class SyncEngine: ObservableObject {
     /// Handle a remote notification from CloudKit.
     /// Returns true if changes were fetched, false otherwise.
     @discardableResult
-    func handleRemoteNotification(userInfo: [AnyHashable: Any]) async -> Bool {
+    public func handleRemoteNotification(userInfo: [AnyHashable: Any]) async -> Bool {
         NSLog("SyncEngine: Received remote notification")
 
         // Parse the notification to check if it's a CloudKit notification
         let notification = CKNotification(fromRemoteNotificationDictionary: userInfo)
 
-        guard notification?.subscriptionID == CloudKitManager.subscriptionID else {
+        guard notification?.subscriptionID == CloudKitConfig.subscriptionID else {
             NSLog("SyncEngine: Notification not for our subscription")
             return false
         }
@@ -206,7 +212,7 @@ class SyncEngine: ObservableObject {
     // MARK: - Full Sync
 
     /// Perform a full sync: push local changes, then pull remote changes
-    func sync() async throws {
+    public func sync() async throws {
         guard status != .disabled else {
             NSLog("SyncEngine: Sync skipped - disabled")
             return
@@ -503,7 +509,7 @@ class SyncEngine: ObservableObject {
     // MARK: - Tombstone Cleanup
 
     /// Purge tombstones older than retention period that have been synced
-    func cleanupTombstones() async throws {
+    public func cleanupTombstones() async throws {
         guard let dbQueue = database.getQueue() else {
             throw DatabaseError.notInitialized
         }
@@ -592,7 +598,7 @@ class SyncEngine: ObservableObject {
     }
 
     /// Reset sync state (for account switch or troubleshooting)
-    func resetSyncState() async throws {
+    public func resetSyncState() async throws {
         NSLog("SyncEngine: Resetting sync state")
 
         // Stop any ongoing sync
@@ -626,7 +632,7 @@ class SyncEngine: ObservableObject {
     // MARK: - Push
 
     /// Push all dirty records to CloudKit
-    func pushLocalChanges() async throws {
+    public func pushLocalChanges() async throws {
         guard let dbQueue = database.getQueue() else {
             throw DatabaseError.notInitialized
         }
@@ -846,7 +852,7 @@ class SyncEngine: ObservableObject {
     /// Pull remote changes from CloudKit.
     /// Returns the total number of changes (changed + deleted records).
     @discardableResult
-    func pullRemoteChanges() async throws -> Int {
+    public func pullRemoteChanges() async throws -> Int {
         guard let dbQueue = database.getQueue() else {
             throw DatabaseError.notInitialized
         }
@@ -982,7 +988,7 @@ class SyncEngine: ObservableObject {
 
         // Count Item records from CloudKit
         let cloudKitItemCount = fullFetchResult.changedRecords.filter {
-            $0.recordType == CloudKitManager.RecordType.item
+            $0.recordType == CloudKitRecordType.item
         }.count
 
         let localCount = try countLocalItems()
@@ -1027,15 +1033,15 @@ class SyncEngine: ObservableObject {
 
         for record in changedRecords {
             switch record.recordType {
-            case CloudKitManager.RecordType.tag:
+            case CloudKitRecordType.tag:
                 tagRecords.append(record)
-            case CloudKitManager.RecordType.item:
+            case CloudKitRecordType.item:
                 itemRecords.append(record)
-            case CloudKitManager.RecordType.itemTag:
+            case CloudKitRecordType.itemTag:
                 itemTagRecords.append(record)
-            case CloudKitManager.RecordType.timeEntry:
+            case CloudKitRecordType.timeEntry:
                 timeEntryRecords.append(record)
-            case CloudKitManager.RecordType.savedSearch:
+            case CloudKitRecordType.savedSearch:
                 savedSearchRecords.append(record)
             default:
                 break
@@ -1137,7 +1143,7 @@ class SyncEngine: ObservableObject {
             }
 
             // 4. TimeEntries with retry
-            var pendingTimeEntries = timeEntryRecords
+            let pendingTimeEntries = timeEntryRecords
             var retriedTimeEntries: [CKRecord] = []
 
             for record in pendingTimeEntries {
@@ -1166,32 +1172,32 @@ class SyncEngine: ObservableObject {
                 let recordName = recordID.recordName
 
                 switch recordType {
-                case CloudKitManager.RecordType.item:
+                case CloudKitRecordType.item:
                     // Soft-delete locally
                     try db.execute(
                         sql: "UPDATE items SET deleted_at = ?, needs_push = 0 WHERE ck_record_name = ?",
                         arguments: [now, recordName]
                     )
 
-                case CloudKitManager.RecordType.tag:
+                case CloudKitRecordType.tag:
                     try db.execute(
                         sql: "UPDATE tags SET deleted_at = ?, needs_push = 0 WHERE ck_record_name = ?",
                         arguments: [now, recordName]
                     )
 
-                case CloudKitManager.RecordType.itemTag:
+                case CloudKitRecordType.itemTag:
                     try db.execute(
                         sql: "UPDATE item_tags SET deleted_at = ?, needs_push = 0 WHERE ck_record_name = ?",
                         arguments: [now, recordName]
                     )
 
-                case CloudKitManager.RecordType.timeEntry:
+                case CloudKitRecordType.timeEntry:
                     try db.execute(
                         sql: "UPDATE time_entries SET deleted_at = ?, needs_push = 0 WHERE ck_record_name = ?",
                         arguments: [now, recordName]
                     )
 
-                case CloudKitManager.RecordType.savedSearch:
+                case CloudKitRecordType.savedSearch:
                     try db.execute(
                         sql: "UPDATE saved_searches SET deleted_at = ?, needs_push = 0 WHERE ck_record_name = ?",
                         arguments: [now, recordName]
@@ -1301,7 +1307,7 @@ class SyncEngine: ObservableObject {
     /// Apply a single changed record to the database
     private func applyChangedRecord(_ record: CKRecord, to db: GRDB.Database) throws {
         switch record.recordType {
-        case CloudKitManager.RecordType.item:
+        case CloudKitRecordType.item:
             if var item = CKRecordConverters.item(from: record) {
                 // Ensure parent exists; if not, drop the reference to avoid FK failures.
                 if let parentId = item.parentId, !parentId.isEmpty,
@@ -1328,7 +1334,7 @@ class SyncEngine: ObservableObject {
                 NSLog("SyncEngine: Failed to convert item record: \(record.recordID.recordName), keys: \(record.allKeys())")
             }
 
-        case CloudKitManager.RecordType.tag:
+        case CloudKitRecordType.tag:
             if let tag = CKRecordConverters.tag(from: record) {
                 if let existingTag = try Tag.fetchOne(db, key: tag.id),
                    existingTag.needsPush == 1 {
@@ -1342,7 +1348,7 @@ class SyncEngine: ObservableObject {
                 }
             }
 
-        case CloudKitManager.RecordType.itemTag:
+        case CloudKitRecordType.itemTag:
             if let itemTag = CKRecordConverters.itemTag(from: record) {
                 // ItemTag uses composite key
                 let existing = try ItemTag
@@ -1359,7 +1365,7 @@ class SyncEngine: ObservableObject {
                 }
             }
 
-        case CloudKitManager.RecordType.timeEntry:
+        case CloudKitRecordType.timeEntry:
             if let timeEntry = CKRecordConverters.timeEntry(from: record) {
                 if let existingEntry = try TimeEntry.fetchOne(db, key: timeEntry.id),
                    existingEntry.needsPush == 1 {
@@ -1373,7 +1379,7 @@ class SyncEngine: ObservableObject {
                 }
             }
 
-        case CloudKitManager.RecordType.savedSearch:
+        case CloudKitRecordType.savedSearch:
             if let savedSearch = CKRecordConverters.savedSearch(from: record) {
                 if let existingSearch = try SavedSearch.fetchOne(db, key: savedSearch.id),
                    existingSearch.needsPush == 1 {
@@ -1470,7 +1476,7 @@ class SyncEngine: ObservableObject {
                 let serverModifiedAt = serverRecord["modifiedAt"] as? Int ?? 0
 
                 switch serverRecord.recordType {
-                case CloudKitManager.RecordType.item:
+                case CloudKitRecordType.item:
                     // Try to find by ck_record_name first, then by local ID (for items that haven't synced yet)
                     let localId = recordName.hasPrefix("Item_") ? String(recordName.dropFirst(5)) : recordName
                     let localItem = try Item.filter(Column("ck_record_name") == recordName).fetchOne(db)
@@ -1500,7 +1506,7 @@ class SyncEngine: ObservableObject {
                         }
                     }
 
-                case CloudKitManager.RecordType.tag:
+                case CloudKitRecordType.tag:
                     if let localTag = try Tag.filter(Column("ck_record_name") == recordName).fetchOne(db),
                        let localModified = localTag.modifiedAt {
                         if localModified > serverModifiedAt {
@@ -1519,7 +1525,7 @@ class SyncEngine: ObservableObject {
                         }
                     }
 
-                case CloudKitManager.RecordType.itemTag:
+                case CloudKitRecordType.itemTag:
                     // Try to find by ck_record_name first, then by composite key (itemId_tagId)
                     var localItemTag = try ItemTag.filter(Column("ck_record_name") == recordName).fetchOne(db)
                     if localItemTag == nil && recordName.hasPrefix("ItemTag_") {
@@ -1554,7 +1560,7 @@ class SyncEngine: ObservableObject {
                         }
                     }
 
-                case CloudKitManager.RecordType.timeEntry:
+                case CloudKitRecordType.timeEntry:
                     if let localTimeEntry = try TimeEntry.filter(Column("ck_record_name") == recordName).fetchOne(db),
                        let localModified = localTimeEntry.modifiedAt {
                         if localModified > serverModifiedAt {
@@ -1573,7 +1579,7 @@ class SyncEngine: ObservableObject {
                         }
                     }
 
-                case CloudKitManager.RecordType.savedSearch:
+                case CloudKitRecordType.savedSearch:
                     if let localSearch = try SavedSearch.filter(Column("ck_record_name") == recordName).fetchOne(db) {
                         if localSearch.modifiedAt > serverModifiedAt {
                             // Local wins - mark for retry
@@ -1638,31 +1644,31 @@ class SyncEngine: ObservableObject {
                 let systemFields = CKRecordConverters.encodeSystemFields(record)
 
                 switch record.recordType {
-                case CloudKitManager.RecordType.item:
+                case CloudKitRecordType.item:
                     try db.execute(
                         sql: "UPDATE items SET needs_push = 0, ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
                         arguments: [changeTag, systemFields, recordName]
                     )
 
-                case CloudKitManager.RecordType.tag:
+                case CloudKitRecordType.tag:
                     try db.execute(
                         sql: "UPDATE tags SET needs_push = 0, ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
                         arguments: [changeTag, systemFields, recordName]
                     )
 
-                case CloudKitManager.RecordType.itemTag:
+                case CloudKitRecordType.itemTag:
                     try db.execute(
                         sql: "UPDATE item_tags SET needs_push = 0, ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
                         arguments: [changeTag, systemFields, recordName]
                     )
 
-                case CloudKitManager.RecordType.timeEntry:
+                case CloudKitRecordType.timeEntry:
                     try db.execute(
                         sql: "UPDATE time_entries SET needs_push = 0, ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
                         arguments: [changeTag, systemFields, recordName]
                     )
 
-                case CloudKitManager.RecordType.savedSearch:
+                case CloudKitRecordType.savedSearch:
                     try db.execute(
                         sql: "UPDATE saved_searches SET needs_push = 0, ck_change_tag = ?, ck_system_fields = ? WHERE ck_record_name = ?",
                         arguments: [changeTag, systemFields, recordName]
@@ -1707,3 +1713,4 @@ class SyncEngine: ObservableObject {
         }
     }
 }
+

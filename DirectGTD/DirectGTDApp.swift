@@ -11,7 +11,7 @@ import SwiftUI
 @main
 struct DirectGTDApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var syncEngine = SyncEngine()
+    @StateObject private var syncEngine: SyncEngine
     @StateObject private var settings = UserSettings()
     @StateObject private var store: ItemStore
     private var apiServer: APIServer?
@@ -35,6 +35,12 @@ struct DirectGTDApp: App {
         let sharedStore = ItemStore(settings: sharedSettings)
         _settings = StateObject(wrappedValue: sharedSettings)
         _store = StateObject(wrappedValue: sharedStore)
+
+        // Create sync engine with CloudKit manager and database
+        _syncEngine = StateObject(wrappedValue: SyncEngine(
+            cloudKitManager: CloudKitManager.shared,
+            database: Database.shared
+        ))
 
         // Start API server
         let server = APIServer(itemStore: sharedStore, port: 9876)

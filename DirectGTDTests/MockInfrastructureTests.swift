@@ -1,5 +1,6 @@
 import XCTest
 import CloudKit
+import DirectGTDCore
 @testable import DirectGTD
 
 /// Tests to verify mock infrastructure works correctly

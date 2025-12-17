@@ -1,6 +1,7 @@
 import XCTest
 import CloudKit
 import Combine
+import DirectGTDCore
 @testable import DirectGTD
 
 /// Tests for async CloudKit operations using mock infrastructure

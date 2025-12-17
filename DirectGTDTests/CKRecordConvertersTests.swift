@@ -21,7 +21,7 @@ final class CKRecordConvertersTests: XCTestCase {
     // MARK: - System Fields Tests
 
     func testEncodeSystemFieldsReturnsData() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.item, recordName: "test")
+        let record = mockManager.newRecord(type: CloudKitRecordType.item, recordName: "test")
 
         let data = CKRecordConverters.encodeSystemFields(record)
 
@@ -43,7 +43,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testSystemFieldsRoundTrip() {
-        let originalRecord = mockManager.newRecord(type: CloudKitManager.RecordType.item, recordName: "test_item")
+        let originalRecord = mockManager.newRecord(type: CloudKitRecordType.item, recordName: "test_item")
         originalRecord["testField"] = "test value" as CKRecordValue
 
         // Encode
@@ -73,7 +73,7 @@ final class CKRecordConvertersTests: XCTestCase {
 
         let record = CKRecordConverters.record(from: item, manager: mockManager)
 
-        XCTAssertEqual(record.recordType, CloudKitManager.RecordType.item)
+        XCTAssertEqual(record.recordType, CloudKitRecordType.item)
         XCTAssertEqual(record["localId"] as? String, "test-id")
         XCTAssertEqual(record["title"] as? String, "Test Item")
         XCTAssertEqual(record["itemType"] as? String, "Task")
@@ -124,7 +124,7 @@ final class CKRecordConvertersTests: XCTestCase {
         item.createdAt = 1000
         item.modifiedAt = 1000
 
-        let originalRecord = mockManager.newRecord(type: CloudKitManager.RecordType.item, recordName: "Item_test-id")
+        let originalRecord = mockManager.newRecord(type: CloudKitRecordType.item, recordName: "Item_test-id")
         let systemFields = CKRecordConverters.encodeSystemFields(originalRecord)
 
         // Update item with system fields
@@ -138,7 +138,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToItem() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.item, recordName: "Item_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.item, recordName: "Item_123")
         record["localId"] = "123" as CKRecordValue
         record["title"] = "Test Title" as CKRecordValue
         record["itemType"] = "Task" as CKRecordValue
@@ -170,7 +170,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToItemWithMissingOptionalFields() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.item, recordName: "Item_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.item, recordName: "Item_123")
         record["localId"] = "123" as CKRecordValue
         // Minimal required fields only
 
@@ -186,7 +186,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToItemReturnsNilForInvalidRecordType() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.tag, recordName: "Tag_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.tag, recordName: "Tag_123")
         record["localId"] = "123" as CKRecordValue
 
         let item = CKRecordConverters.item(from: record)
@@ -195,7 +195,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToItemReturnsNilForMissingLocalId() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.item, recordName: "Item_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.item, recordName: "Item_123")
         // Missing localId field
 
         let item = CKRecordConverters.item(from: record)
@@ -204,7 +204,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToItemHandlesUnknownItemType() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.item, recordName: "Item_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.item, recordName: "Item_123")
         record["localId"] = "123" as CKRecordValue
         record["itemType"] = "InvalidType" as CKRecordValue
 
@@ -223,7 +223,7 @@ final class CKRecordConvertersTests: XCTestCase {
 
         let record = CKRecordConverters.record(from: tag, manager: mockManager)
 
-        XCTAssertEqual(record.recordType, CloudKitManager.RecordType.tag)
+        XCTAssertEqual(record.recordType, CloudKitRecordType.tag)
         XCTAssertEqual(record["localId"] as? String, "tag-id")
         XCTAssertEqual(record["name"] as? String, "Test Tag")
         XCTAssertEqual(record["color"] as? String, "#FF0000")
@@ -232,7 +232,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToTag() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.tag, recordName: "Tag_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.tag, recordName: "Tag_123")
         record["localId"] = "123" as CKRecordValue
         record["name"] = "Test Tag" as CKRecordValue
         record["color"] = "#00FF00" as CKRecordValue
@@ -251,7 +251,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToTagReturnsNilForInvalidType() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.item, recordName: "Item_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.item, recordName: "Item_123")
         record["localId"] = "123" as CKRecordValue
         record["name"] = "Test" as CKRecordValue
 
@@ -261,7 +261,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToTagReturnsNilForMissingRequiredFields() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.tag, recordName: "Tag_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.tag, recordName: "Tag_123")
         record["localId"] = "123" as CKRecordValue
         // Missing name field
 
@@ -278,7 +278,7 @@ final class CKRecordConvertersTests: XCTestCase {
 
         let record = CKRecordConverters.record(from: itemTag, manager: mockManager)
 
-        XCTAssertEqual(record.recordType, CloudKitManager.RecordType.itemTag)
+        XCTAssertEqual(record.recordType, CloudKitRecordType.itemTag)
         XCTAssertEqual(record["itemId"] as? String, "item-123")
         XCTAssertEqual(record["tagId"] as? String, "tag-456")
         XCTAssertEqual(record["createdAt"] as? Int, 1000)
@@ -286,7 +286,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToItemTag() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.itemTag, recordName: "ItemTag_123_456")
+        let record = mockManager.newRecord(type: CloudKitRecordType.itemTag, recordName: "ItemTag_123_456")
         record["itemId"] = "item-123" as CKRecordValue
         record["tagId"] = "tag-456" as CKRecordValue
         record["createdAt"] = 1000 as CKRecordValue
@@ -303,7 +303,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToItemTagReturnsNilForMissingFields() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.itemTag, recordName: "ItemTag_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.itemTag, recordName: "ItemTag_123")
         record["itemId"] = "item-123" as CKRecordValue
         // Missing tagId
 
@@ -322,7 +322,7 @@ final class CKRecordConvertersTests: XCTestCase {
 
         let record = CKRecordConverters.record(from: entry, manager: mockManager)
 
-        XCTAssertEqual(record.recordType, CloudKitManager.RecordType.timeEntry)
+        XCTAssertEqual(record.recordType, CloudKitRecordType.timeEntry)
         XCTAssertEqual(record["localId"] as? String, "entry-id")
         XCTAssertEqual(record["itemId"] as? String, "item-id")
         XCTAssertEqual(record["startedAt"] as? Int, 1000)
@@ -332,7 +332,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToTimeEntry() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.timeEntry, recordName: "TimeEntry_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.timeEntry, recordName: "TimeEntry_123")
         record["localId"] = "123" as CKRecordValue
         record["itemId"] = "item-456" as CKRecordValue
         record["startedAt"] = 1000 as CKRecordValue
@@ -353,7 +353,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToTimeEntryReturnsNilForMissingRequiredFields() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.timeEntry, recordName: "TimeEntry_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.timeEntry, recordName: "TimeEntry_123")
         record["localId"] = "123" as CKRecordValue
         record["itemId"] = "item-456" as CKRecordValue
         // Missing startedAt
@@ -377,7 +377,7 @@ final class CKRecordConvertersTests: XCTestCase {
 
         let record = CKRecordConverters.record(from: search, manager: mockManager)
 
-        XCTAssertEqual(record.recordType, CloudKitManager.RecordType.savedSearch)
+        XCTAssertEqual(record.recordType, CloudKitRecordType.savedSearch)
         XCTAssertEqual(record["localId"] as? String, "search-id")
         XCTAssertEqual(record["name"] as? String, "My Search")
         XCTAssertEqual(record["sql"] as? String, "SELECT * FROM items")
@@ -387,7 +387,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToSavedSearch() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.savedSearch, recordName: "SavedSearch_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.savedSearch, recordName: "SavedSearch_123")
         record["localId"] = "123" as CKRecordValue
         record["name"] = "Test Search" as CKRecordValue
         record["sql"] = "SELECT id FROM items WHERE completed_at IS NOT NULL" as CKRecordValue
@@ -408,7 +408,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToSavedSearchReturnsNilForMissingFields() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.savedSearch, recordName: "SavedSearch_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.savedSearch, recordName: "SavedSearch_123")
         record["localId"] = "123" as CKRecordValue
         record["name"] = "Test" as CKRecordValue
         // Missing sql field
@@ -419,7 +419,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToSavedSearchUsesDefaults() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.savedSearch, recordName: "SavedSearch_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.savedSearch, recordName: "SavedSearch_123")
         record["localId"] = "123" as CKRecordValue
         record["name"] = "Test" as CKRecordValue
         record["sql"] = "SELECT *" as CKRecordValue
@@ -436,7 +436,7 @@ final class CKRecordConvertersTests: XCTestCase {
     // MARK: - Update Helper Tests
 
     func testUpdateRecordWithItem() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.item, recordName: "Item_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.item, recordName: "Item_123")
 
         var item = Item(id: "123")
         item.title = "Updated Title"
@@ -456,7 +456,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testUpdateRecordWithTag() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.tag, recordName: "Tag_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.tag, recordName: "Tag_123")
 
         var tag = Tag(id: "123", name: "Updated Tag", createdAt: 1000)
         tag.color = "#0000FF"
@@ -470,7 +470,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testUpdateRecordWithItemTag() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.itemTag, recordName: "ItemTag_1_2")
+        let record = mockManager.newRecord(type: CloudKitRecordType.itemTag, recordName: "ItemTag_1_2")
 
         var itemTag = ItemTag(itemId: "item-1", tagId: "tag-2", createdAt: 1000)
         itemTag.modifiedAt = 2000
@@ -483,7 +483,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testUpdateRecordWithTimeEntry() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.timeEntry, recordName: "TimeEntry_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.timeEntry, recordName: "TimeEntry_123")
 
         var entry = TimeEntry(id: "123", itemId: "item-456", startedAt: 1000)
         entry.endedAt = 2000
@@ -499,7 +499,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testUpdateRecordWithSavedSearch() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.savedSearch, recordName: "SavedSearch_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.savedSearch, recordName: "SavedSearch_123")
 
         var search = SavedSearch(id: "123", name: "Updated", sql: "SELECT * FROM tags")
         search.sortOrder = 10
@@ -529,7 +529,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordToItemPreservesDeletedAt() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.item, recordName: "Item_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.item, recordName: "Item_123")
         record["localId"] = "123" as CKRecordValue
         record["deletedAt"] = 5000 as CKRecordValue
 
@@ -565,7 +565,7 @@ final class CKRecordConvertersTests: XCTestCase {
     }
 
     func testRecordWithEmptyParentIdStringNormalizedToNil() {
-        let record = mockManager.newRecord(type: CloudKitManager.RecordType.item, recordName: "Item_123")
+        let record = mockManager.newRecord(type: CloudKitRecordType.item, recordName: "Item_123")
         record["localId"] = "123" as CKRecordValue
         record["parentId"] = "   " as CKRecordValue
 

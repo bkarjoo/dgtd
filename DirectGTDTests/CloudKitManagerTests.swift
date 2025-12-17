@@ -27,7 +27,7 @@ final class CloudKitManagerTests: XCTestCase {
     }
 
     func testSubscriptionID() {
-        XCTAssertEqual(CloudKitManager.subscriptionID, "DirectGTD-zone-changes")
+        XCTAssertEqual(CloudKitConfig.subscriptionID, "DirectGTD-zone-changes")
     }
 
     func testContainerIsConfigured() {
@@ -47,11 +47,11 @@ final class CloudKitManagerTests: XCTestCase {
     // MARK: - Record Type Tests
 
     func testRecordTypeConstants() {
-        XCTAssertEqual(CloudKitManager.RecordType.item, "Item")
-        XCTAssertEqual(CloudKitManager.RecordType.tag, "Tag")
-        XCTAssertEqual(CloudKitManager.RecordType.itemTag, "ItemTag")
-        XCTAssertEqual(CloudKitManager.RecordType.timeEntry, "TimeEntry")
-        XCTAssertEqual(CloudKitManager.RecordType.savedSearch, "SavedSearch")
+        XCTAssertEqual(CloudKitRecordType.item, "Item")
+        XCTAssertEqual(CloudKitRecordType.tag, "Tag")
+        XCTAssertEqual(CloudKitRecordType.itemTag, "ItemTag")
+        XCTAssertEqual(CloudKitRecordType.timeEntry, "TimeEntry")
+        XCTAssertEqual(CloudKitRecordType.savedSearch, "SavedSearch")
     }
 
     // MARK: - Record ID Helper Tests
@@ -80,7 +80,7 @@ final class CloudKitManagerTests: XCTestCase {
 
     func testNewRecordCreation() {
         let recordName = "test-item-456"
-        let record = manager.newRecord(type: CloudKitManager.RecordType.item, recordName: recordName)
+        let record = manager.newRecord(type: CloudKitRecordType.item, recordName: recordName)
 
         XCTAssertEqual(record.recordType, "Item")
         XCTAssertEqual(record.recordID.recordName, recordName)
@@ -88,8 +88,8 @@ final class CloudKitManagerTests: XCTestCase {
     }
 
     func testNewRecordCreationForDifferentTypes() {
-        let itemRecord = manager.newRecord(type: CloudKitManager.RecordType.item, recordName: "item-1")
-        let tagRecord = manager.newRecord(type: CloudKitManager.RecordType.tag, recordName: "tag-1")
+        let itemRecord = manager.newRecord(type: CloudKitRecordType.item, recordName: "item-1")
+        let tagRecord = manager.newRecord(type: CloudKitRecordType.tag, recordName: "tag-1")
 
         XCTAssertEqual(itemRecord.recordType, "Item")
         XCTAssertEqual(tagRecord.recordType, "Tag")
@@ -97,7 +97,7 @@ final class CloudKitManagerTests: XCTestCase {
     }
 
     func testNewRecordIsInCorrectZone() {
-        let record = manager.newRecord(type: CloudKitManager.RecordType.item, recordName: "test")
+        let record = manager.newRecord(type: CloudKitRecordType.item, recordName: "test")
 
         XCTAssertEqual(record.recordID.zoneID, manager.zoneID)
     }
@@ -190,11 +190,11 @@ final class CloudKitManagerTests: XCTestCase {
 
     func testRecordCreationForAllTypes() {
         let types = [
-            (CloudKitManager.RecordType.item, "Item"),
-            (CloudKitManager.RecordType.tag, "Tag"),
-            (CloudKitManager.RecordType.itemTag, "ItemTag"),
-            (CloudKitManager.RecordType.timeEntry, "TimeEntry"),
-            (CloudKitManager.RecordType.savedSearch, "SavedSearch")
+            (CloudKitRecordType.item, "Item"),
+            (CloudKitRecordType.tag, "Tag"),
+            (CloudKitRecordType.itemTag, "ItemTag"),
+            (CloudKitRecordType.timeEntry, "TimeEntry"),
+            (CloudKitRecordType.savedSearch, "SavedSearch")
         ]
 
         for (typeConstant, expectedType) in types {

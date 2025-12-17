@@ -1,6 +1,7 @@
 import Foundation
 import CloudKit
 import Combine
+import DirectGTDCore
 @testable import DirectGTD
 
 /// Mock implementation of CloudKitManagerProtocol for testing

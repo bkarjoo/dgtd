@@ -2,6 +2,7 @@ import XCTest
 import CloudKit
 import Combine
 import GRDB
+import DirectGTDCore
 @testable import DirectGTD
 
 /// Integration tests for SyncEngine using mock CloudKit manager

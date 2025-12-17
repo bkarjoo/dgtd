@@ -297,5 +297,8 @@ struct SettingsView: View {
 
 #Preview {
     let settings = UserSettings()
-    SettingsView(settings: settings, store: ItemStore(settings: settings), syncEngine: SyncEngine())
+    SettingsView(settings: settings, store: ItemStore(settings: settings), syncEngine: SyncEngine(
+        cloudKitManager: CloudKitManager.shared,
+        database: Database.shared
+    ))
 }

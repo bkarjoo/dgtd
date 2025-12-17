@@ -252,5 +252,8 @@ struct ContentView: View {
 
 #Preview {
     let settings = UserSettings()
-    ContentView(store: ItemStore(settings: settings), settings: settings, syncEngine: SyncEngine())
+    ContentView(store: ItemStore(settings: settings), settings: settings, syncEngine: SyncEngine(
+        cloudKitManager: CloudKitManager.shared,
+        database: Database.shared
+    ))
 }
