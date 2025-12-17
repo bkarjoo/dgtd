@@ -193,6 +193,648 @@ class ItemStore: ObservableObject {
         }
     }
 
+    func createQuickCaptureItemWithDetails(
+        title: String,
+        itemType: ItemType = .task,
+        dueDate: Int? = nil
+    ) -> Item? {
+        guard !title.isEmpty else { return nil }
+
+        do {
+            let quickCaptureFolderId = try? repository.getSetting(key: "quick_capture_folder_id")
+
+            let now = Int(Date().timeIntervalSince1970)
+            var item = Item(
+                title: title,
+                itemType: itemType,
+                parentId: quickCaptureFolderId,
+                sortOrder: 0,
+                createdAt: now,
+                modifiedAt: now,
+                dueDate: dueDate
+            )
+
+            if let parentId = item.parentId {
+                let siblings = items.filter { $0.parentId == parentId }
+                let maxSortOrder = siblings.map { $0.sortOrder }.max() ?? -1
+                item.sortOrder = maxSortOrder + 1
+            } else {
+                let rootItems = items.filter { $0.parentId == nil }
+                let maxSortOrder = rootItems.map { $0.sortOrder }.max() ?? -1
+                item.sortOrder = maxSortOrder + 1
+            }
+
+            try repository.create(item)
+            registerCreationUndo(for: item.id)
+            loadItems()
+            return items.first { $0.id == item.id } ?? item
+        } catch {
+            print("Error creating quick capture item: \(error)")
+            return nil
+        }
+    }
+
+    // MARK: - API Functions
+
+    /// Get overdue items (due date in the past, not completed)
+    func getOverdueItemsForAPI(includeCompleted: Bool = false, includeArchive: Bool = false) -> [Item] {
+        let now = Int(Date().timeIntervalSince1970)
+        let archiveIds = includeArchive ? Set<String>() : getArchiveDescendantIds()
+
+        return items.filter { item in
+            guard let dueDate = item.dueDate, dueDate < now else { return false }
+            if !includeCompleted && item.completedAt != nil { return false }
+            if !includeArchive && archiveIds.contains(item.id) { return false }
+            return true
+        }.sorted { ($0.dueDate ?? 0) < ($1.dueDate ?? 0) }
+    }
+
+    /// Get items due today
+    func getDueTodayForAPI(includeCompleted: Bool = false, includeArchive: Bool = false) -> [Item] {
+        let calendar = Calendar.current
+        let startOfToday = Int(calendar.startOfDay(for: Date()).timeIntervalSince1970)
+        let endOfToday = startOfToday + 86400 - 1
+        let archiveIds = includeArchive ? Set<String>() : getArchiveDescendantIds()
+
+        return items.filter { item in
+            guard let dueDate = item.dueDate, dueDate >= startOfToday && dueDate <= endOfToday else { return false }
+            if !includeCompleted && item.completedAt != nil { return false }
+            if !includeArchive && archiveIds.contains(item.id) { return false }
+            return true
+        }.sorted { ($0.dueDate ?? 0) < ($1.dueDate ?? 0) }
+    }
+
+    /// Get items due tomorrow
+    func getDueTomorrowForAPI(includeCompleted: Bool = false, includeArchive: Bool = false) -> [Item] {
+        let calendar = Calendar.current
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date())!
+        let startOfTomorrow = Int(calendar.startOfDay(for: tomorrow).timeIntervalSince1970)
+        let endOfTomorrow = startOfTomorrow + 86400 - 1
+        let archiveIds = includeArchive ? Set<String>() : getArchiveDescendantIds()
+
+        return items.filter { item in
+            guard let dueDate = item.dueDate, dueDate >= startOfTomorrow && dueDate <= endOfTomorrow else { return false }
+            if !includeCompleted && item.completedAt != nil { return false }
+            if !includeArchive && archiveIds.contains(item.id) { return false }
+            return true
+        }.sorted { ($0.dueDate ?? 0) < ($1.dueDate ?? 0) }
+    }
+
+    /// Get items due this week (Sunday to Saturday)
+    func getDueThisWeekForAPI(includeCompleted: Bool = false, includeArchive: Bool = false) -> [Item] {
+        let calendar = Calendar.current
+        let today = Date()
+        let weekday = calendar.component(.weekday, from: today)
+        let daysToSubtract = weekday - 1 // Sunday = 1
+        let startOfWeek = calendar.date(byAdding: .day, value: -daysToSubtract, to: calendar.startOfDay(for: today))!
+        let endOfWeek = calendar.date(byAdding: .day, value: 7, to: startOfWeek)!
+
+        let startTimestamp = Int(startOfWeek.timeIntervalSince1970)
+        let endTimestamp = Int(endOfWeek.timeIntervalSince1970) - 1
+        let archiveIds = includeArchive ? Set<String>() : getArchiveDescendantIds()
+
+        return items.filter { item in
+            guard let dueDate = item.dueDate, dueDate >= startTimestamp && dueDate <= endTimestamp else { return false }
+            if !includeCompleted && item.completedAt != nil { return false }
+            if !includeArchive && archiveIds.contains(item.id) { return false }
+            return true
+        }.sorted { ($0.dueDate ?? 0) < ($1.dueDate ?? 0) }
+    }
+
+    /// Helper to get all IDs under the archive folder
+    private func getArchiveDescendantIds() -> Set<String> {
+        guard let archiveFolderId = try? repository.getSetting(key: "archive_folder_id") else {
+            return Set<String>()
+        }
+
+        var ids = Set<String>([archiveFolderId])
+        var toProcess = [archiveFolderId]
+
+        while !toProcess.isEmpty {
+            let parentId = toProcess.removeFirst()
+            let children = items.filter { $0.parentId == parentId }
+            for child in children {
+                ids.insert(child.id)
+                toProcess.append(child.id)
+            }
+        }
+
+        return ids
+    }
+
+    /// Get available tasks (not completed, not deferred to the future)
+    func getAvailableTasksForAPI(parentId: String? = nil, includeDeferred: Bool = false, includeArchive: Bool = false) -> [Item] {
+        let now = Int(Date().timeIntervalSince1970)
+        let archiveIds = includeArchive ? Set<String>() : getArchiveDescendantIds()
+
+        return items.filter { item in
+            guard item.itemType == .task && item.completedAt == nil else { return false }
+            if !includeDeferred {
+                if let est = item.earliestStartTime, est > now { return false }
+            }
+            if let pid = parentId, item.parentId != pid { return false }
+            if !includeArchive && archiveIds.contains(item.id) { return false }
+            return true
+        }.sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    /// Get deferred tasks (earliest_start_time in the future)
+    func getDeferredTasksForAPI(parentId: String? = nil, includeArchive: Bool = false) -> [Item] {
+        let now = Int(Date().timeIntervalSince1970)
+        let archiveIds = includeArchive ? Set<String>() : getArchiveDescendantIds()
+
+        return items.filter { item in
+            guard item.itemType == .task && item.completedAt == nil else { return false }
+            guard let est = item.earliestStartTime, est > now else { return false }
+            if let pid = parentId, item.parentId != pid { return false }
+            if !includeArchive && archiveIds.contains(item.id) { return false }
+            return true
+        }.sorted { ($0.earliestStartTime ?? 0) < ($1.earliestStartTime ?? 0) }
+    }
+
+    /// Get completed tasks
+    func getCompletedTasksForAPI(parentId: String? = nil, since: Int? = nil, limit: Int = 100, includeArchive: Bool = false) -> [Item] {
+        let archiveIds = includeArchive ? Set<String>() : getArchiveDescendantIds()
+
+        var result = items.filter { item in
+            guard item.itemType == .task && item.completedAt != nil else { return false }
+            if let pid = parentId, item.parentId != pid { return false }
+            if let sinceTime = since, let completedAt = item.completedAt, completedAt < sinceTime { return false }
+            if !includeArchive && archiveIds.contains(item.id) { return false }
+            return true
+        }.sorted { ($0.completedAt ?? 0) > ($1.completedAt ?? 0) }
+
+        if result.count > limit {
+            result = Array(result.prefix(limit))
+        }
+        return result
+    }
+
+    /// Get oldest incomplete tasks (excludes Templates, Reference, Archive, Trash)
+    func getOldestTasksForAPI(limit: Int = 20, rootId: String? = nil) -> [Item] {
+        // Get IDs of excluded folders
+        let excludedFolderNames = ["templates", "reference", "archive", "trash"]
+        let excludedRootIds = items.filter { item in
+            item.parentId == nil && excludedFolderNames.contains(item.title?.lowercased() ?? "")
+        }.map { $0.id }
+
+        // Get all descendants of excluded folders
+        var excludedIds = Set<String>(excludedRootIds)
+        for rootId in excludedRootIds {
+            excludedIds.formUnion(getDescendantIds(of: rootId))
+        }
+
+        // If rootId specified, get all descendants of that root
+        var rootDescendants: Set<String>? = nil
+        if let rid = rootId {
+            rootDescendants = Set([rid])
+            rootDescendants?.formUnion(getDescendantIds(of: rid))
+        }
+
+        var result = items.filter { item in
+            guard item.itemType == .task && item.completedAt == nil else { return false }
+            if excludedIds.contains(item.id) { return false }
+            if let rd = rootDescendants, !rd.contains(item.id) { return false }
+            return true
+        }.sorted { ($0.createdAt) < ($1.createdAt) }
+
+        if result.count > limit {
+            result = Array(result.prefix(limit))
+        }
+        return result
+    }
+
+    /// Helper to get all descendant IDs of an item
+    private func getDescendantIds(of parentId: String) -> Set<String> {
+        var ids = Set<String>()
+        var toProcess = [parentId]
+
+        while !toProcess.isEmpty {
+            let pid = toProcess.removeFirst()
+            let children = items.filter { $0.parentId == pid }
+            for child in children {
+                ids.insert(child.id)
+                toProcess.append(child.id)
+            }
+        }
+
+        return ids
+    }
+
+    /// Get dashboard data (Next tagged, urgent tagged, overdue items)
+    func getDashboardForAPI() -> (next: [Item], urgent: [Item], overdue: [Item]) {
+        let archiveIds = getArchiveDescendantIds()
+        let now = Int(Date().timeIntervalSince1970)
+
+        // Find "Next" and "urgent" tags
+        let nextTagId = tags.first { $0.name.lowercased() == "next" }?.id
+        let urgentTagId = tags.first { $0.name.lowercased() == "urgent" }?.id
+
+        // Get item IDs with each tag
+        let nextItemIds = nextTagId != nil ? getItemIdsForTag(tagId: nextTagId!) : Set<String>()
+        let urgentItemIds = urgentTagId != nil ? getItemIdsForTag(tagId: urgentTagId!) : Set<String>()
+
+        let nextItems = items.filter { item in
+            nextItemIds.contains(item.id) && item.completedAt == nil && !archiveIds.contains(item.id)
+        }.sorted { $0.sortOrder < $1.sortOrder }
+
+        let urgentItems = items.filter { item in
+            urgentItemIds.contains(item.id) && item.completedAt == nil && !archiveIds.contains(item.id)
+        }.sorted { ($0.dueDate ?? Int.max) < ($1.dueDate ?? Int.max) }
+
+        let overdueItems = items.filter { item in
+            guard let dueDate = item.dueDate, dueDate < now, item.completedAt == nil else { return false }
+            return !archiveIds.contains(item.id)
+        }.sorted { ($0.dueDate ?? 0) < ($1.dueDate ?? 0) }
+
+        return (nextItems, urgentItems, overdueItems)
+    }
+
+    /// Get item IDs that have a specific tag (uses cached itemTags)
+    private func getItemIdsForTag(tagId: String) -> Set<String> {
+        var ids = Set<String>()
+        for (itemId, tags) in itemTags {
+            if tags.contains(where: { $0.id == tagId }) {
+                ids.insert(itemId)
+            }
+        }
+        return ids
+    }
+
+    /// Get stuck projects (folders without Next-tagged items)
+    func getStuckProjectsForAPI(rootId: String? = nil) -> [Item] {
+        let nextTagId = tags.first { $0.name.lowercased() == "next" }?.id
+        let onHoldTagId = tags.first { $0.name.lowercased() == "on-hold" }?.id
+
+        // Excluded folder names
+        let excludedFolderNames = ["archive", "reference", "templates", "trash"]
+        let excludedRootIds = Set(items.filter { item in
+            item.parentId == nil && excludedFolderNames.contains(item.title?.lowercased() ?? "")
+        }.map { $0.id })
+
+        // Get IDs of items tagged "Next"
+        let nextTaggedIds = nextTagId != nil ? getItemIdsForTag(tagId: nextTagId!) : Set<String>()
+        let onHoldIds = onHoldTagId != nil ? getItemIdsForTag(tagId: onHoldTagId!) : Set<String>()
+
+        // Get projects to check
+        var projectsToCheck: [Item]
+        if let rid = rootId {
+            projectsToCheck = items.filter { $0.parentId == rid && $0.itemType == .folder }
+        } else {
+            projectsToCheck = items.filter { item in
+                guard item.itemType == .folder else { return false }
+                guard let parentId = item.parentId else { return false }
+                // Parent must be a root item
+                guard let parent = items.first(where: { $0.id == parentId }) else { return false }
+                return parent.parentId == nil && !excludedRootIds.contains(parentId)
+            }
+        }
+
+        // Filter to stuck projects (no Next-tagged descendants)
+        return projectsToCheck.filter { project in
+            // Skip if on-hold
+            if onHoldIds.contains(project.id) { return false }
+
+            // Check if any descendant has Next tag
+            let descendants = getDescendantIds(of: project.id)
+            let hasNextAction = descendants.contains { nextTaggedIds.contains($0) }
+            return !hasNextAction
+        }
+    }
+
+    /// Create a root-level item (no parent)
+    func createRootItemForAPI(title: String, itemType: ItemType = .folder, dueDate: Int? = nil, earliestStartTime: Int? = nil) -> Item? {
+        let now = Int(Date().timeIntervalSince1970)
+        let rootItems = items.filter { $0.parentId == nil }
+        let maxSortOrder = rootItems.map { $0.sortOrder }.max() ?? -1
+
+        let item = Item(
+            title: title,
+            itemType: itemType,
+            parentId: nil,
+            sortOrder: maxSortOrder + 1,
+            createdAt: now,
+            modifiedAt: now,
+            dueDate: dueDate,
+            earliestStartTime: earliestStartTime
+        )
+
+        do {
+            try repository.create(item)
+            loadItems()
+            return items.first { $0.id == item.id }
+        } catch {
+            print("Error creating root item: \(error)")
+            return nil
+        }
+    }
+
+    /// Get node tree structure
+    func getNodeTreeForAPI(rootId: String? = nil, maxDepth: Int = 10) -> [[String: Any]] {
+        func buildTree(parentId: String?, currentDepth: Int) -> [[String: Any]] {
+            if currentDepth > maxDepth { return [] }
+
+            let children = items.filter { $0.parentId == parentId }.sorted { $0.sortOrder < $1.sortOrder }
+            return children.map { item in
+                [
+                    "id": item.id,
+                    "title": item.title ?? "",
+                    "parentId": item.parentId as Any,
+                    "children": buildTree(parentId: item.id, currentDepth: currentDepth + 1)
+                ]
+            }
+        }
+
+        if let rid = rootId {
+            guard let root = items.first(where: { $0.id == rid }) else { return [] }
+            return [[
+                "id": root.id,
+                "title": root.title ?? "",
+                "parentId": root.parentId as Any,
+                "children": buildTree(parentId: root.id, currentDepth: 1)
+            ]]
+        }
+        return buildTree(parentId: nil, currentDepth: 0)
+    }
+
+    /// Swap sort order between two items
+    func swapItemsForAPI(itemId1: String, itemId2: String) -> Bool {
+        guard var item1 = items.first(where: { $0.id == itemId1 }),
+              var item2 = items.first(where: { $0.id == itemId2 }) else { return false }
+
+        if item1.parentId != item2.parentId { return false }
+
+        let tempSort = item1.sortOrder
+        item1.sortOrder = item2.sortOrder
+        item2.sortOrder = tempSort
+        item1.modifiedAt = Int(Date().timeIntervalSince1970)
+        item2.modifiedAt = Int(Date().timeIntervalSince1970)
+
+        do {
+            try repository.update(item1)
+            try repository.update(item2)
+            loadItems()
+            return true
+        } catch {
+            print("Error swapping items: \(error)")
+            return false
+        }
+    }
+
+    /// Move item to a specific position among siblings
+    func moveToPositionForAPI(itemId: String, position: Int) -> Bool {
+        guard var item = items.first(where: { $0.id == itemId }) else { return false }
+
+        var siblings = items.filter { $0.parentId == item.parentId && $0.id != itemId }.sorted { $0.sortOrder < $1.sortOrder }
+        let clampedPosition = max(0, min(position, siblings.count))
+
+        siblings.insert(item, at: clampedPosition)
+
+        do {
+            for (index, var sibling) in siblings.enumerated() {
+                sibling.sortOrder = index
+                sibling.modifiedAt = Int(Date().timeIntervalSince1970)
+                try repository.update(sibling)
+            }
+            loadItems()
+            return true
+        } catch {
+            print("Error moving item to position: \(error)")
+            return false
+        }
+    }
+
+    /// Reorder children of a parent
+    func reorderChildrenForAPI(parentId: String, itemIds: [String]) -> Bool {
+        let children = items.filter { $0.parentId == parentId }
+        let childIdSet = Set(children.map { $0.id })
+
+        // Verify all provided IDs are children
+        for id in itemIds {
+            if !childIdSet.contains(id) { return false }
+        }
+
+        do {
+            for (index, id) in itemIds.enumerated() {
+                guard var item = items.first(where: { $0.id == id }) else { continue }
+                item.sortOrder = index
+                item.modifiedAt = Int(Date().timeIntervalSince1970)
+                try repository.update(item)
+            }
+            loadItems()
+            return true
+        } catch {
+            print("Error reordering children: \(error)")
+            return false
+        }
+    }
+
+    /// Get items by tag names (AND logic)
+    func getItemsByTagNamesForAPI(tagNames: [String], includeCompleted: Bool = false, includeArchive: Bool = false) -> [Item] {
+        let archiveIds = includeArchive ? Set<String>() : getArchiveDescendantIds()
+
+        // Find tag IDs
+        let tagIds = tagNames.compactMap { name in
+            tags.first { $0.name.lowercased() == name.lowercased() }?.id
+        }
+
+        if tagIds.count != tagNames.count { return [] }
+
+        // Get items with ALL specified tags
+        var itemIdsWithAllTags: Set<String>? = nil
+        for tagId in tagIds {
+            let itemsWithTag = getItemIdsForTag(tagId: tagId)
+            if itemIdsWithAllTags == nil {
+                itemIdsWithAllTags = itemsWithTag
+            } else {
+                itemIdsWithAllTags = itemIdsWithAllTags?.intersection(itemsWithTag)
+            }
+        }
+
+        guard let matchingIds = itemIdsWithAllTags else { return [] }
+
+        return items.filter { item in
+            guard matchingIds.contains(item.id) else { return false }
+            if !includeCompleted && item.completedAt != nil { return false }
+            if !includeArchive && archiveIds.contains(item.id) { return false }
+            return true
+        }
+    }
+
+    /// Empty trash (permanently delete items in Trash folder)
+    func emptyTrashForAPI(keepItemsSince: Int? = nil) -> Int {
+        // Find Trash folder
+        guard let trashFolder = items.first(where: { $0.title?.lowercased() == "trash" && $0.parentId == nil }) else {
+            return 0
+        }
+
+        // Get all items in trash
+        var trashItemIds = getDescendantIds(of: trashFolder.id)
+        trashItemIds.insert(trashFolder.id)
+        trashItemIds.remove(trashFolder.id) // Keep the folder itself
+
+        // Filter by date if specified
+        var itemsToDelete: [String]
+        if let since = keepItemsSince {
+            itemsToDelete = items.filter { trashItemIds.contains($0.id) && $0.modifiedAt < since }.map { $0.id }
+        } else {
+            itemsToDelete = Array(trashItemIds)
+        }
+
+        var deletedCount = 0
+        for id in itemsToDelete {
+            do {
+                try repository.delete(itemId: id)
+                deletedCount += 1
+            } catch {
+                print("Error deleting item \(id): \(error)")
+            }
+        }
+
+        loadItems()
+        return deletedCount
+    }
+
+    /// Instantiate a template
+    func instantiateTemplateForAPI(templateId: String, name: String, parentId: String?, asType: ItemType = .project) -> Item? {
+        guard items.contains(where: { $0.id == templateId }) else { return nil }
+
+        let now = Int(Date().timeIntervalSince1970)
+        let targetParentId = parentId ?? (try? repository.getSetting(key: "quick_capture_folder_id"))
+
+        // Get siblings for sort order
+        let siblings = items.filter { $0.parentId == targetParentId }
+        let maxSortOrder = siblings.map { $0.sortOrder }.max() ?? -1
+
+        // Create root of new instance
+        let newRoot = Item(
+            title: name,
+            itemType: asType,
+            parentId: targetParentId,
+            sortOrder: maxSortOrder + 1,
+            createdAt: now,
+            modifiedAt: now
+        )
+
+        do {
+            try repository.create(newRoot)
+
+            // Clone children recursively
+            cloneChildren(of: templateId, to: newRoot.id, now: now)
+
+            loadItems()
+            return items.first { $0.id == newRoot.id }
+        } catch {
+            print("Error instantiating template: \(error)")
+            return nil
+        }
+    }
+
+    private func cloneChildren(of sourceId: String, to destId: String, now: Int) {
+        let children = items.filter { $0.parentId == sourceId }.sorted { $0.sortOrder < $1.sortOrder }
+
+        for child in children {
+            let clone = Item(
+                title: child.title,
+                itemType: child.itemType,
+                notes: child.notes,
+                parentId: destId,
+                sortOrder: child.sortOrder,
+                createdAt: now,
+                modifiedAt: now
+            )
+
+            do {
+                try repository.create(clone)
+
+                // Copy tags
+                let childTags = getTagsForItem(itemId: child.id)
+                for tag in childTags {
+                    addTagToItem(itemId: clone.id, tag: tag)
+                }
+
+                // Recurse
+                cloneChildren(of: child.id, to: clone.id, now: now)
+            } catch {
+                print("Error cloning child: \(error)")
+            }
+        }
+    }
+
+    /// Archives an item by moving it to the configured archive folder (from app_settings)
+    /// Returns the archived item, or nil if failed
+    func archiveItemForAPI(id: String) -> Item? {
+        guard var item = items.first(where: { $0.id == id }) else { return nil }
+
+        // Get archive folder ID from settings
+        guard let archiveFolderId = try? repository.getSetting(key: "archive_folder_id"),
+              items.contains(where: { $0.id == archiveFolderId }) else {
+            return nil
+        }
+
+        // Check if already in archive
+        if item.parentId == archiveFolderId {
+            return item
+        }
+
+        let siblings = items.filter { $0.parentId == archiveFolderId }
+        let maxSortOrder = siblings.map { $0.sortOrder }.max() ?? -1
+
+        item.parentId = archiveFolderId
+        item.sortOrder = maxSortOrder + 1
+        item.modifiedAt = Int(Date().timeIntervalSince1970)
+
+        do {
+            try repository.update(item)
+            loadItems()
+            return items.first { $0.id == id }
+        } catch {
+            print("Error archiving item for API: \(error)")
+            return nil
+        }
+    }
+
+    /// Get all active timers across all items
+    func getAllActiveTimersForAPI() -> [TimeEntry] {
+        return activeTimeEntries
+    }
+
+    /// Update a time entry's start and/or end time
+    func updateTimeEntryForAPI(entryId: String, startedAt: Int? = nil, endedAt: Int? = nil) -> TimeEntry? {
+        do {
+            guard var entry = try repository.getTimeEntry(id: entryId) else {
+                return nil
+            }
+
+            let now = Int(Date().timeIntervalSince1970)
+
+            if let newStart = startedAt {
+                entry.startedAt = newStart
+            }
+
+            if let newEnd = endedAt {
+                entry.endedAt = newEnd
+                // Recalculate duration
+                entry.duration = newEnd - entry.startedAt
+            }
+
+            entry.modifiedAt = now
+
+            try repository.updateTimeEntry(entry)
+
+            // If we set an end time, remove from active timers
+            if endedAt != nil {
+                activeTimeEntries.removeAll { $0.id == entryId }
+            }
+
+            // Return updated entry
+            return try repository.getTimeEntry(id: entryId)
+        } catch {
+            print("Error updating time entry: \(error)")
+            return nil
+        }
+    }
+
     func updateItemTitle(id: String, title: String?) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
 

@@ -159,6 +159,246 @@ class APIServer {
             return ["items": store.items.map { itemToDict($0) }]
         }
 
+        // GET /items/overdue - Get overdue items
+        if method == "GET" && segments == ["items", "overdue"] {
+            let includeCompleted = queryParams["include_completed"] == "true"
+            let includeArchive = queryParams["include_archive"] == "true"
+            let items = store.getOverdueItemsForAPI(includeCompleted: includeCompleted, includeArchive: includeArchive)
+            return ["items": items.map { itemToDict($0) }]
+        }
+
+        // GET /items/due-today - Get items due today
+        if method == "GET" && segments == ["items", "due-today"] {
+            let includeCompleted = queryParams["include_completed"] == "true"
+            let includeArchive = queryParams["include_archive"] == "true"
+            let items = store.getDueTodayForAPI(includeCompleted: includeCompleted, includeArchive: includeArchive)
+            return ["items": items.map { itemToDict($0) }]
+        }
+
+        // GET /items/due-tomorrow - Get items due tomorrow
+        if method == "GET" && segments == ["items", "due-tomorrow"] {
+            let includeCompleted = queryParams["include_completed"] == "true"
+            let includeArchive = queryParams["include_archive"] == "true"
+            let items = store.getDueTomorrowForAPI(includeCompleted: includeCompleted, includeArchive: includeArchive)
+            return ["items": items.map { itemToDict($0) }]
+        }
+
+        // GET /items/due-this-week - Get items due this week
+        if method == "GET" && segments == ["items", "due-this-week"] {
+            let includeCompleted = queryParams["include_completed"] == "true"
+            let includeArchive = queryParams["include_archive"] == "true"
+            let items = store.getDueThisWeekForAPI(includeCompleted: includeCompleted, includeArchive: includeArchive)
+            return ["items": items.map { itemToDict($0) }]
+        }
+
+        // GET /tasks/available - Get available tasks
+        if method == "GET" && segments == ["tasks", "available"] {
+            let parentId = queryParams["parent_id"]
+            let includeDeferred = queryParams["include_deferred"] == "true"
+            let includeArchive = queryParams["include_archive"] == "true"
+            let items = store.getAvailableTasksForAPI(parentId: parentId, includeDeferred: includeDeferred, includeArchive: includeArchive)
+            return ["items": items.map { itemToDict($0) }]
+        }
+
+        // GET /tasks/deferred - Get deferred tasks
+        if method == "GET" && segments == ["tasks", "deferred"] {
+            let parentId = queryParams["parent_id"]
+            let includeArchive = queryParams["include_archive"] == "true"
+            let items = store.getDeferredTasksForAPI(parentId: parentId, includeArchive: includeArchive)
+            return ["items": items.map { itemToDict($0) }]
+        }
+
+        // GET /tasks/completed - Get completed tasks
+        if method == "GET" && segments == ["tasks", "completed"] {
+            let parentId = queryParams["parent_id"]
+            let includeArchive = queryParams["include_archive"] == "true"
+            let limit = Int(queryParams["limit"] ?? "") ?? 100
+            var since: Int? = nil
+            if let sinceStr = queryParams["since"] {
+                let formatter = ISO8601DateFormatter()
+                if let date = formatter.date(from: sinceStr) {
+                    since = Int(date.timeIntervalSince1970)
+                }
+            }
+            let items = store.getCompletedTasksForAPI(parentId: parentId, since: since, limit: limit, includeArchive: includeArchive)
+            return ["items": items.map { itemToDict($0) }]
+        }
+
+        // GET /tasks/oldest - Get oldest incomplete tasks
+        if method == "GET" && segments == ["tasks", "oldest"] {
+            let limit = Int(queryParams["limit"] ?? "") ?? 20
+            let rootId = queryParams["root_id"]
+            let items = store.getOldestTasksForAPI(limit: limit, rootId: rootId)
+            return ["items": items.map { itemToDict($0) }]
+        }
+
+        // GET /dashboard - Get actionable items dashboard
+        if method == "GET" && segments == ["dashboard"] {
+            let (next, urgent, overdue) = store.getDashboardForAPI()
+            return [
+                "next": next.map { itemToDict($0) },
+                "urgent": urgent.map { itemToDict($0) },
+                "overdue": overdue.map { itemToDict($0) }
+            ]
+        }
+
+        // GET /projects/stuck - Get stuck projects
+        if method == "GET" && segments == ["projects", "stuck"] {
+            let rootId = queryParams["root_id"]
+            let projects = store.getStuckProjectsForAPI(rootId: rootId)
+            return ["projects": projects.map { itemToDict($0) }]
+        }
+
+        // GET /node-tree - Get hierarchical tree structure
+        if method == "GET" && segments == ["node-tree"] {
+            let rootId = queryParams["root_id"]
+            let maxDepth = Int(queryParams["max_depth"] ?? "") ?? 10
+            let tree = store.getNodeTreeForAPI(rootId: rootId, maxDepth: maxDepth)
+            return ["tree": tree]
+        }
+
+        // GET /items/by-tags - Get items by tag names
+        if method == "GET" && segments == ["items", "by-tags"] {
+            guard let tagsParam = queryParams["tags"], !tagsParam.isEmpty else {
+                throw APIError(statusCode: 400, message: "Missing required query parameter: tags")
+            }
+            let tagNames = tagsParam.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            let includeCompleted = queryParams["include_completed"] == "true"
+            let includeArchive = queryParams["include_archive"] == "true"
+            let items = store.getItemsByTagNamesForAPI(tagNames: tagNames, includeCompleted: includeCompleted, includeArchive: includeArchive)
+            return ["items": items.map { itemToDict($0) }]
+        }
+
+        // GET /timers/active - Get all active timers
+        if method == "GET" && segments == ["timers", "active"] {
+            let entries = store.getAllActiveTimersForAPI()
+            return ["entries": entries.map { timeEntryToDict($0) }]
+        }
+
+        // POST /root-items - Create a root-level item
+        if method == "POST" && segments == ["root-items"] {
+            let params = try parseBody(body)
+            guard let title = params["title"] as? String else {
+                throw APIError(statusCode: 400, message: "Missing required field: title")
+            }
+
+            let itemTypeStr = params["itemType"] as? String ?? "Folder"
+            let itemType = ItemType(rawValue: itemTypeStr) ?? .folder
+            let dueDate = params["dueDate"] as? Int
+            let earliestStartTime = params["earliestStartTime"] as? Int
+
+            guard let item = store.createRootItemForAPI(
+                title: title,
+                itemType: itemType,
+                dueDate: dueDate,
+                earliestStartTime: earliestStartTime
+            ) else {
+                throw APIError(statusCode: 500, message: "Failed to create root item")
+            }
+            return ["item": itemToDict(item)]
+        }
+
+        // POST /items/swap - Swap sort order of two items
+        if method == "POST" && segments == ["items", "swap"] {
+            let params = try parseBody(body)
+            guard let itemId1 = params["itemId1"] as? String,
+                  let itemId2 = params["itemId2"] as? String else {
+                throw APIError(statusCode: 400, message: "Missing required fields: itemId1, itemId2")
+            }
+
+            guard store.swapItemsForAPI(itemId1: itemId1, itemId2: itemId2) else {
+                throw APIError(statusCode: 400, message: "Failed to swap items. Items must have same parent.")
+            }
+            return ["swapped": true, "itemId1": itemId1, "itemId2": itemId2]
+        }
+
+        // POST /trash/empty - Empty the trash
+        if method == "POST" && segments == ["trash", "empty"] {
+            var keepSince: Int? = nil
+            if let keepSinceStr = queryParams["keep_items_since"] {
+                let formatter = ISO8601DateFormatter()
+                if let date = formatter.date(from: keepSinceStr) {
+                    keepSince = Int(date.timeIntervalSince1970)
+                }
+            }
+            let deletedCount = store.emptyTrashForAPI(keepItemsSince: keepSince)
+            return ["deletedCount": deletedCount]
+        }
+
+        // POST /templates/:id/instantiate - Create instance from template
+        if method == "POST" && segments.count == 3 && segments[0] == "templates" && segments[2] == "instantiate" {
+            let templateId = segments[1]
+            let params = try parseBody(body)
+            guard let name = params["name"] as? String else {
+                throw APIError(statusCode: 400, message: "Missing required field: name")
+            }
+
+            let parentId = params["parentId"] as? String
+            let asTypeStr = params["asType"] as? String ?? "Project"
+            let asType = ItemType(rawValue: asTypeStr) ?? .project
+
+            guard let item = store.instantiateTemplateForAPI(
+                templateId: templateId,
+                name: name,
+                parentId: parentId,
+                asType: asType
+            ) else {
+                throw APIError(statusCode: 500, message: "Failed to instantiate template")
+            }
+            return ["item": itemToDict(item)]
+        }
+
+        // PUT /time-entries/:id - Update time entry
+        if method == "PUT" && segments.count == 2 && segments[0] == "time-entries" {
+            let entryId = segments[1]
+            let params = try parseBody(body)
+            let startedAt = params["startedAt"] as? Int
+            let endedAt = params["endedAt"] as? Int
+
+            guard let entry = store.updateTimeEntryForAPI(entryId: entryId, startedAt: startedAt, endedAt: endedAt) else {
+                throw APIError(statusCode: 404, message: "Time entry not found")
+            }
+            return ["entry": timeEntryToDict(entry)]
+        }
+
+        // GET /items/:id/total-time - Get total time for an item
+        if method == "GET" && segments.count == 3 && segments[0] == "items" && segments[2] == "total-time" {
+            let itemId = segments[1]
+            guard store.items.contains(where: { $0.id == itemId }) else {
+                throw APIError(statusCode: 404, message: "Item not found")
+            }
+            let totalSeconds = store.totalTime(for: itemId)
+            return ["itemId": itemId, "totalSeconds": totalSeconds]
+        }
+
+        // POST /items/:id/move-to-position - Move item to specific position
+        if method == "POST" && segments.count == 3 && segments[0] == "items" && segments[2] == "move-to-position" {
+            let itemId = segments[1]
+            let params = try parseBody(body)
+            guard let position = params["position"] as? Int else {
+                throw APIError(statusCode: 400, message: "Missing required field: position")
+            }
+
+            guard store.moveToPositionForAPI(itemId: itemId, position: position) else {
+                throw APIError(statusCode: 500, message: "Failed to move item to position")
+            }
+            return ["moved": true, "itemId": itemId, "position": position]
+        }
+
+        // POST /items/:id/reorder-children - Reorder children of an item
+        if method == "POST" && segments.count == 3 && segments[0] == "items" && segments[2] == "reorder-children" {
+            let parentId = segments[1]
+            let params = try parseBody(body)
+            guard let itemIds = params["itemIds"] as? [String] else {
+                throw APIError(statusCode: 400, message: "Missing required field: itemIds (array)")
+            }
+
+            guard store.reorderChildrenForAPI(parentId: parentId, itemIds: itemIds) else {
+                throw APIError(statusCode: 400, message: "Failed to reorder children. Verify all item IDs are children of the parent.")
+            }
+            return ["reordered": true, "parentId": parentId]
+        }
+
         // GET /items/:id - Get single item
         if method == "GET" && segments.count == 2 && segments[0] == "items" {
             let itemId = segments[1]
@@ -187,6 +427,27 @@ class APIServer {
                 notes: notes
             ) else {
                 throw APIError(statusCode: 500, message: "Failed to create item")
+            }
+            return ["item": itemToDict(item)]
+        }
+
+        // POST /quick-capture - Add item to quick capture folder
+        if method == "POST" && segments == ["quick-capture"] {
+            let params = try parseBody(body)
+            guard let title = params["title"] as? String else {
+                throw APIError(statusCode: 400, message: "Missing required field: title")
+            }
+
+            let itemTypeStr = params["itemType"] as? String ?? "Task"
+            let itemType = ItemType(rawValue: itemTypeStr) ?? .task
+            let dueDate = params["dueDate"] as? Int
+
+            guard let item = store.createQuickCaptureItemWithDetails(
+                title: title,
+                itemType: itemType,
+                dueDate: dueDate
+            ) else {
+                throw APIError(statusCode: 500, message: "Failed to create quick capture item")
             }
             return ["item": itemToDict(item)]
         }
@@ -227,6 +488,19 @@ class APIServer {
 
             guard let item = store.items.first(where: { $0.id == itemId }) else {
                 throw APIError(statusCode: 500, message: "Item disappeared after toggle")
+            }
+            return ["item": itemToDict(item)]
+        }
+
+        // POST /items/:id/archive - Archive item
+        if method == "POST" && segments.count == 3 && segments[0] == "items" && segments[2] == "archive" {
+            let itemId = segments[1]
+            guard store.items.contains(where: { $0.id == itemId }) else {
+                throw APIError(statusCode: 404, message: "Item not found")
+            }
+
+            guard let item = store.archiveItemForAPI(id: itemId) else {
+                throw APIError(statusCode: 500, message: "Failed to archive item. Is archive folder configured?")
             }
             return ["item": itemToDict(item)]
         }
