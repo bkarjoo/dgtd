@@ -399,6 +399,16 @@ class APIServer {
             return ["reordered": true, "parentId": parentId]
         }
 
+        // GET /items/:id/path - Get ancestor path from root to item
+        if method == "GET" && segments.count == 3 && segments[0] == "items" && segments[2] == "path" {
+            let itemId = segments[1]
+            guard let path = store.getItemPathForAPI(itemId: itemId) else {
+                throw APIError(statusCode: 404, message: "Item not found")
+            }
+            let pathArray = path.map { ["id": $0.id, "title": $0.title] }
+            return ["path": pathArray]
+        }
+
         // GET /items/:id - Get single item
         if method == "GET" && segments.count == 2 && segments[0] == "items" {
             let itemId = segments[1]

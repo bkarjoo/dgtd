@@ -835,6 +835,29 @@ class ItemStore: ObservableObject {
         }
     }
 
+    /// Get the full ancestor path from root to item (ordered root → item)
+    func getItemPathForAPI(itemId: String) -> [(id: String, title: String)]? {
+        guard let item = items.first(where: { $0.id == itemId }) else {
+            return nil
+        }
+
+        var path: [(id: String, title: String)] = []
+        var current: Item? = item
+
+        // Build path from item up to root
+        while let node = current {
+            path.append((id: node.id, title: node.title ?? ""))
+            if let parentId = node.parentId {
+                current = items.first { $0.id == parentId }
+            } else {
+                current = nil
+            }
+        }
+
+        // Reverse to get root → item order
+        return path.reversed()
+    }
+
     func updateItemTitle(id: String, title: String?) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
 
