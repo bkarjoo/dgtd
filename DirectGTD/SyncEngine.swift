@@ -223,7 +223,13 @@ class SyncEngine: ObservableObject {
             try await pushLocalChanges()
 
             // Then pull remote changes
-            try await pullRemoteChanges()
+            let changeCount = try await pullRemoteChanges()
+
+            // If pull returned 0 changes, verify we're actually in sync
+            // This detects stale change tokens that miss updates
+            if changeCount == 0 {
+                try await detectAndRecoverFromDrift()
+            }
 
             try metadataStore.updateLastSyncTimestamp()
 
@@ -296,12 +302,6 @@ class SyncEngine: ObservableObject {
         // Network errors are retryable
         if (error as NSError).domain == NSURLErrorDomain {
             return true
-        }
-        // Timeout errors (from our own timeout logic) are retryable
-        if let cloudKitError = error as? CloudKitError {
-            if case .syncFailed(let message) = cloudKitError, message.contains("timed out") {
-                return true
-            }
         }
         return false
     }
@@ -772,7 +772,7 @@ class SyncEngine: ObservableObject {
         NSLog("SyncEngine: Push complete - saved: \(totalSaved), deleted: \(totalDeleted), conflicts: \(totalConflicts)")
     }
 
-    /// Perform a single batch operation (up to 400 records) with timeout
+    /// Perform a single batch operation (up to 400 records)
     private func performSingleBatchOperation(recordsToSave: [CKRecord],
                                              recordIDsToDelete: [CKRecord.ID],
                                              dbQueue: DatabaseQueue) async throws -> BatchModifyResult {
@@ -780,73 +780,53 @@ class SyncEngine: ObservableObject {
         operation.savePolicy = .ifServerRecordUnchanged
         operation.isAtomic = false  // Allow partial success
 
-        // Set timeout for the operation (30 seconds)
-        let timeoutSeconds: UInt64 = 30
+        // Use continuation to wait for operation completion
+        let result: BatchModifyResult = try await withCheckedThrowingContinuation { continuation in
+            var batchResult = BatchModifyResult()
 
-        // Use task group for timeout support
-        let result: BatchModifyResult = try await withThrowingTaskGroup(of: BatchModifyResult.self) { group in
-            // Main CloudKit operation task
-            group.addTask {
-                try await withCheckedThrowingContinuation { continuation in
-                    var batchResult = BatchModifyResult()
-
-                    operation.perRecordSaveBlock = { recordID, result in
-                        switch result {
-                        case .success(let record):
-                            batchResult.savedRecords.append(record)
-                        case .failure(let error):
-                            if let ckError = error as? CKError, ckError.code == .serverRecordChanged {
-                                batchResult.conflictErrors.append((recordID, ckError))
-                            } else {
-                                NSLog("SyncEngine: Failed to save record \(recordID.recordName): \(error)")
-                            }
-                        }
+            operation.perRecordSaveBlock = { recordID, result in
+                switch result {
+                case .success(let record):
+                    batchResult.savedRecords.append(record)
+                case .failure(let error):
+                    if let ckError = error as? CKError, ckError.code == .serverRecordChanged {
+                        batchResult.conflictErrors.append((recordID, ckError))
+                    } else {
+                        NSLog("SyncEngine: Failed to save record \(recordID.recordName): \(error)")
                     }
-
-                    operation.perRecordDeleteBlock = { recordID, result in
-                        switch result {
-                        case .success:
-                            batchResult.deletedRecordIDs.append(recordID)
-                        case .failure(let error):
-                            // Ignore "not found" errors for deletes
-                            if let ckError = error as? CKError, ckError.code == .unknownItem {
-                                batchResult.deletedRecordIDs.append(recordID)  // Consider it deleted
-                            } else {
-                                NSLog("SyncEngine: Failed to delete record \(recordID.recordName): \(error)")
-                            }
-                        }
-                    }
-
-                    operation.modifyRecordsResultBlock = { result in
-                        switch result {
-                        case .success:
-                            continuation.resume(returning: batchResult)
-                        case .failure(let error):
-                            // Check if it's a partial failure - we still want to process successful records
-                            if let ckError = error as? CKError, ckError.code == .partialFailure {
-                                // Partial failure is expected when some records fail - continue with what succeeded
-                                continuation.resume(returning: batchResult)
-                            } else {
-                                continuation.resume(throwing: error)
-                            }
-                        }
-                    }
-
-                    self.cloudKitManager.privateDatabase.add(operation)
                 }
             }
 
-            // Timeout task
-            group.addTask {
-                try await Task.sleep(nanoseconds: timeoutSeconds * 1_000_000_000)
-                operation.cancel()
-                throw CloudKitError.syncFailed("CloudKit operation timed out after \(timeoutSeconds) seconds")
+            operation.perRecordDeleteBlock = { recordID, result in
+                switch result {
+                case .success:
+                    batchResult.deletedRecordIDs.append(recordID)
+                case .failure(let error):
+                    // Ignore "not found" errors for deletes
+                    if let ckError = error as? CKError, ckError.code == .unknownItem {
+                        batchResult.deletedRecordIDs.append(recordID)  // Consider it deleted
+                    } else {
+                        NSLog("SyncEngine: Failed to delete record \(recordID.recordName): \(error)")
+                    }
+                }
             }
 
-            // Return first completed result (either success or timeout)
-            let firstResult = try await group.next()!
-            group.cancelAll()
-            return firstResult
+            operation.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success:
+                    continuation.resume(returning: batchResult)
+                case .failure(let error):
+                    // Check if it's a partial failure - we still want to process successful records
+                    if let ckError = error as? CKError, ckError.code == .partialFailure {
+                        // Partial failure is expected when some records fail - continue with what succeeded
+                        continuation.resume(returning: batchResult)
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+
+            self.cloudKitManager.privateDatabase.add(operation)
         }
 
         return result
@@ -910,7 +890,7 @@ class SyncEngine: ObservableObject {
         return totalChanged + totalDeleted
     }
 
-    /// Fetch a single batch of zone changes with timeout
+    /// Fetch a single batch of zone changes
     private func fetchZoneChanges(changeToken: CKServerChangeToken?) async throws -> ZoneFetchResult {
         NSLog("SyncEngine: Starting zone fetch (hasToken=\(changeToken != nil))")
 
@@ -923,72 +903,112 @@ class SyncEngine: ObservableObject {
         )
         operation.qualityOfService = .userInitiated
 
-        // Set timeout for the operation (30 seconds)
-        let timeoutSeconds: UInt64 = 30
+        return try await withCheckedThrowingContinuation { continuation in
+            var fetchResult = ZoneFetchResult()
+            var operationError: Error?
+            var recordCount = 0
 
-        return try await withThrowingTaskGroup(of: ZoneFetchResult.self) { group in
-            // Main fetch task
-            group.addTask {
-                try await withCheckedThrowingContinuation { continuation in
-                    var fetchResult = ZoneFetchResult()
-                    var operationError: Error?
-
-                    operation.recordWasChangedBlock = { _, result in
-                        switch result {
-                        case .success(let record):
-                            fetchResult.changedRecords.append(record)
-                        case .failure(let error):
-                            NSLog("SyncEngine: Error fetching record: \(error)")
-                        }
-                    }
-
-                    operation.recordWithIDWasDeletedBlock = { recordID, recordType in
-                        fetchResult.deletedRecordIDs.append((recordID, recordType))
-                    }
-
-                    operation.recordZoneChangeTokensUpdatedBlock = { _, token, _ in
-                        fetchResult.newChangeToken = token
-                    }
-
-                    operation.recordZoneFetchResultBlock = { [zoneID = self.cloudKitManager.zoneID] fetchedZoneID, result in
-                        guard fetchedZoneID == zoneID else { return }
-
-                        switch result {
-                        case .success(let (token, _, moreComing)):
-                            fetchResult.newChangeToken = token
-                            fetchResult.moreComing = moreComing
-                            NSLog("SyncEngine: Zone fetch result - changed=\(fetchResult.changedRecords.count), deleted=\(fetchResult.deletedRecordIDs.count), moreComing=\(moreComing)")
-                        case .failure(let error):
-                            NSLog("SyncEngine: Zone fetch error: \(error)")
-                            operationError = error
-                        }
-                    }
-
-                    operation.fetchRecordZoneChangesResultBlock = { result in
-                        NSLog("SyncEngine: Fetch operation completed")
-                        switch result {
-                        case .success:
-                            continuation.resume(returning: fetchResult)
-                        case .failure(let error):
-                            continuation.resume(throwing: operationError ?? error)
-                        }
-                    }
-
-                    self.cloudKitManager.privateDatabase.add(operation)
+            operation.recordWasChangedBlock = { _, result in
+                switch result {
+                case .success(let record):
+                    fetchResult.changedRecords.append(record)
+                    recordCount += 1
+                case .failure(let error):
+                    NSLog("SyncEngine: Error fetching record: \(error)")
                 }
             }
 
-            // Timeout task
-            group.addTask {
-                try await Task.sleep(nanoseconds: timeoutSeconds * 1_000_000_000)
-                operation.cancel()
-                throw CloudKitError.syncFailed("CloudKit fetch timed out after \(timeoutSeconds) seconds")
+            operation.recordWithIDWasDeletedBlock = { recordID, recordType in
+                fetchResult.deletedRecordIDs.append((recordID, recordType))
             }
 
-            // Return first completed result
-            let firstResult = try await group.next()!
-            group.cancelAll()
-            return firstResult
+            operation.recordZoneChangeTokensUpdatedBlock = { _, token, _ in
+                fetchResult.newChangeToken = token
+            }
+
+            operation.recordZoneFetchResultBlock = { [zoneID = self.cloudKitManager.zoneID] fetchedZoneID, result in
+                guard fetchedZoneID == zoneID else { return }
+
+                switch result {
+                case .success(let (token, _, moreComing)):
+                    fetchResult.newChangeToken = token
+                    fetchResult.moreComing = moreComing
+                    NSLog("SyncEngine: Zone fetch result - changed=\(fetchResult.changedRecords.count), deleted=\(fetchResult.deletedRecordIDs.count), moreComing=\(moreComing)")
+                case .failure(let error):
+                    NSLog("SyncEngine: Zone fetch error: \(error)")
+                    operationError = error
+                }
+            }
+
+            operation.fetchRecordZoneChangesResultBlock = { result in
+                NSLog("SyncEngine: Fetch operation completed")
+                switch result {
+                case .success:
+                    continuation.resume(returning: fetchResult)
+                case .failure(let error):
+                    continuation.resume(throwing: operationError ?? error)
+                }
+            }
+
+            self.cloudKitManager.privateDatabase.add(operation)
+        }
+    }
+
+    // MARK: - Drift Detection & Auto-Recovery
+
+    /// Count local Item records (non-deleted)
+    private func countLocalItems() throws -> Int {
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        return try dbQueue.read { db in
+            try Item.filter(Column("deleted_at") == nil).fetchCount(db)
+        }
+    }
+
+    /// Detect and recover from sync drift (stale change token)
+    /// Called when pull returns 0 changes to verify we're actually in sync
+    /// Uses a full zone fetch (nil token) to get true CloudKit state
+    private func detectAndRecoverFromDrift() async throws {
+        NSLog("SyncEngine: Checking for sync drift...")
+
+        guard let dbQueue = database.getQueue() else {
+            throw DatabaseError.notInitialized
+        }
+
+        // Do a full fetch from CloudKit (nil token = all records)
+        let fullFetchResult = try await fetchZoneChanges(changeToken: nil)
+
+        // Count Item records from CloudKit
+        let cloudKitItemCount = fullFetchResult.changedRecords.filter {
+            $0.recordType == CloudKitManager.RecordType.item
+        }.count
+
+        let localCount = try countLocalItems()
+        let drift = abs(cloudKitItemCount - localCount)
+
+        NSLog("SyncEngine: CloudKit has \(cloudKitItemCount) items, local has \(localCount) items (drift: \(drift))")
+
+        if drift > 0 {
+            NSLog("SyncEngine: ⚠️ Drift detected! Applying \(fullFetchResult.changedRecords.count) records from full fetch...")
+
+            // Apply the records we just fetched
+            try applyRemoteChanges(
+                changedRecords: fullFetchResult.changedRecords,
+                deletedRecordIDs: fullFetchResult.deletedRecordIDs,
+                dbQueue: dbQueue
+            )
+
+            // Save the new change token
+            if let newToken = fullFetchResult.newChangeToken {
+                let tokenData = try NSKeyedArchiver.archivedData(withRootObject: newToken, requiringSecureCoding: true)
+                try metadataStore.setZoneChangeToken(tokenData)
+            }
+
+            NSLog("SyncEngine: Drift recovery complete")
+        } else {
+            NSLog("SyncEngine: No drift detected, sync is healthy")
         }
     }
 
@@ -1418,6 +1438,15 @@ class SyncEngine: ObservableObject {
         for (recordID, error) in conflicts {
             let recordName = recordID.recordName
 
+            // Log each conflict with details
+            if let serverRecord = error.serverRecord {
+                let serverModifiedAt = serverRecord["modifiedAt"] as? Int ?? 0
+                let title = serverRecord["title"] as? String ?? "(no title)"
+                NSLog("SyncEngine: Conflict - \(serverRecord.recordType) '\(title)' (recordName: \(recordName), serverModifiedAt: \(serverModifiedAt))")
+            } else {
+                NSLog("SyncEngine: Conflict - recordName: \(recordName) (no server record)")
+            }
+
             guard let serverRecord = error.serverRecord else {
                 // No server record available - clear metadata and mark for retry
                 // This forces a fresh push that will either succeed or get the server record next time
@@ -1442,20 +1471,32 @@ class SyncEngine: ObservableObject {
 
                 switch serverRecord.recordType {
                 case CloudKitManager.RecordType.item:
-                    if let localItem = try Item.filter(Column("ck_record_name") == recordName).fetchOne(db) {
+                    // Try to find by ck_record_name first, then by local ID (for items that haven't synced yet)
+                    let localId = recordName.hasPrefix("Item_") ? String(recordName.dropFirst(5)) : recordName
+                    let localItem = try Item.filter(Column("ck_record_name") == recordName).fetchOne(db)
+                        ?? Item.fetchOne(db, key: localId)
+
+                    if let localItem = localItem {
+                        let localTitle = localItem.title ?? "(no title)"
                         if localItem.modifiedAt > serverModifiedAt {
                             // Local wins - update change tag/system fields AND mark for retry
+                            // Also set ck_record_name if it was NULL
                             try db.execute(
-                                sql: "UPDATE items SET ck_change_tag = ?, ck_system_fields = ?, needs_push = 1 WHERE ck_record_name = ?",
-                                arguments: [serverChangeTag, serverSystemFields, recordName]
+                                sql: "UPDATE items SET ck_record_name = ?, ck_change_tag = ?, ck_system_fields = ?, needs_push = 1 WHERE id = ?",
+                                arguments: [recordName, serverChangeTag, serverSystemFields, localItem.id]
                             )
-                            NSLog("SyncEngine: Conflict - local item wins, marked for retry push")
+                            NSLog("SyncEngine: Conflict resolved - LOCAL wins for '\(localTitle)' (local: \(localItem.modifiedAt) > server: \(serverModifiedAt))")
                         } else {
                             // Server wins - apply server version
                             if let item = CKRecordConverters.item(from: serverRecord) {
                                 try item.save(db, onConflict: .replace)
                             }
-                            NSLog("SyncEngine: Conflict - server item wins")
+                            NSLog("SyncEngine: Conflict resolved - SERVER wins for '\(localTitle)' (local: \(localItem.modifiedAt) <= server: \(serverModifiedAt))")
+                        }
+                    } else {
+                        NSLog("SyncEngine: Conflict - no local item found for \(recordName), applying server version")
+                        if let item = CKRecordConverters.item(from: serverRecord) {
+                            try item.save(db, onConflict: .replace)
                         }
                     }
 
@@ -1479,21 +1520,37 @@ class SyncEngine: ObservableObject {
                     }
 
                 case CloudKitManager.RecordType.itemTag:
-                    if let localItemTag = try ItemTag.filter(Column("ck_record_name") == recordName).fetchOne(db),
-                       let localModified = localItemTag.modifiedAt {
+                    // Try to find by ck_record_name first, then by composite key (itemId_tagId)
+                    var localItemTag = try ItemTag.filter(Column("ck_record_name") == recordName).fetchOne(db)
+                    if localItemTag == nil && recordName.hasPrefix("ItemTag_") {
+                        // Parse ItemTag_{itemId}_{tagId}
+                        let parts = recordName.dropFirst(8).split(separator: "_", maxSplits: 1)
+                        if parts.count == 2 {
+                            let itemId = String(parts[0])
+                            let tagId = String(parts[1])
+                            localItemTag = try ItemTag.filter(Column("item_id") == itemId && Column("tag_id") == tagId).fetchOne(db)
+                        }
+                    }
+
+                    if let localItemTag = localItemTag, let localModified = localItemTag.modifiedAt {
                         if localModified > serverModifiedAt {
-                            // Local wins - mark for retry
+                            // Local wins - mark for retry, also set ck_record_name if NULL
                             try db.execute(
-                                sql: "UPDATE item_tags SET ck_change_tag = ?, ck_system_fields = ?, needs_push = 1 WHERE ck_record_name = ?",
-                                arguments: [serverChangeTag, serverSystemFields, recordName]
+                                sql: "UPDATE item_tags SET ck_record_name = ?, ck_change_tag = ?, ck_system_fields = ?, needs_push = 1 WHERE item_id = ? AND tag_id = ?",
+                                arguments: [recordName, serverChangeTag, serverSystemFields, localItemTag.itemId, localItemTag.tagId]
                             )
-                            NSLog("SyncEngine: Conflict - local itemTag wins, marked for retry push")
+                            NSLog("SyncEngine: Conflict resolved - LOCAL itemTag wins (local: \(localModified) > server: \(serverModifiedAt))")
                         } else {
                             // Server wins
                             if let itemTag = CKRecordConverters.itemTag(from: serverRecord) {
                                 try itemTag.save(db, onConflict: .replace)
                             }
-                            NSLog("SyncEngine: Conflict - server itemTag wins")
+                            NSLog("SyncEngine: Conflict resolved - SERVER itemTag wins (local: \(localModified) <= server: \(serverModifiedAt))")
+                        }
+                    } else {
+                        NSLog("SyncEngine: Conflict - no local itemTag found for \(recordName), applying server version")
+                        if let itemTag = CKRecordConverters.itemTag(from: serverRecord) {
+                            try itemTag.save(db, onConflict: .replace)
                         }
                     }
 
