@@ -100,7 +100,10 @@ struct TreeView: View {
             store.treeHasKeyboardFocus = false
         }
         .onKeyPress { keyPress in
-            guard store.editingItemId == nil else { return .ignored }
+            guard store.treeHasKeyboardFocus, store.editingItemId == nil else {
+                print("🚫 KB BLOCKED: focus=\(store.treeHasKeyboardFocus) edit=\(store.editingItemId != nil)")
+                return .ignored
+            }
             switch keyPress.key {
             case .downArrow:
                 if keyPress.modifiers.contains(.command) {

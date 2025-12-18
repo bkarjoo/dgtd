@@ -233,7 +233,10 @@ struct ContentView: View {
                 store.loadItems()
                 return .handled
             }
-            if keyPress.key == .return && keyPress.modifiers.isEmpty && !store.treeHasKeyboardFocus {
+            if keyPress.key == .return &&
+                keyPress.modifiers.isEmpty &&
+                !store.treeHasKeyboardFocus &&
+                !store.noteEditorIsInEditMode {
                 DispatchQueue.main.async {
                     store.createItemAfterSelected()
                     store.focusTreeView()  // ensure new row becomes first responder for typing

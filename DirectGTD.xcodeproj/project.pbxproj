@@ -232,8 +232,6 @@
 				1E4C76062EE86FA5004748ED /* DirectGTD-iOSTests */,
 			);
 			name = "DirectGTD-iOSTests";
-			packageProductDependencies = (
-			);
 			productName = "DirectGTD-iOSTests";
 			productReference = 1E4C76032EE86FA5004748ED /* DirectGTD-iOSTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -252,8 +250,6 @@
 				1E4C760F2EE86FA5004748ED /* PBXTargetDependency */,
 			);
 			name = "DirectGTD-iOSUITests";
-			packageProductDependencies = (
-			);
 			productName = "DirectGTD-iOSUITests";
 			productReference = 1E4C760D2EE86FA5004748ED /* DirectGTD-iOSUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
